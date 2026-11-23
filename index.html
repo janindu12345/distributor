@@ -1,0 +1,3000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ledger — Distributor Stock & Credit System</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+
+<!-- EmailJS: optional, for real one-click sending without opening a mail app. See Settings. -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+
+<!-- Chart.js: for the sales trend chart on Monthly reports -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: { 950:'#0A1220', 900:'#0F1B2E', 800:'#16233C', 700:'#20304D', 600:'#2C4166' },
+          slate2: { 500:'#5B6B85', 400:'#8493AB' },
+          amber2: { 600:'#B8860F', 500:'#C68A1D', 100:'#FBF0D9' },
+          brick: { 700:'#8F2E27', 600:'#B3392C', 100:'#FBE6E3' },
+          forest: { 700:'#245C3D', 600:'#2F7A4F', 100:'#E3F3E8' },
+        },
+        fontFamily: {
+          display: ['"Space Grotesk"','sans-serif'],
+          body: ['"Inter"','sans-serif'],
+          mono: ['"IBM Plex Mono"','monospace'],
+        },
+      }
+    }
+  }
+</script>
+
+<style>
+  body { font-family:'Inter', sans-serif; background:#F4F5F3; }
+  .font-display{ font-family:'Space Grotesk', sans-serif; }
+  .font-num{ font-family:'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb{ background:#C9CEDB; border-radius:4px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+
+  .stamp{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:700; font-size:11px; letter-spacing:.08em;
+    text-transform:uppercase;
+    padding:3px 10px; border-radius:3px;
+    border:1.5px solid currentColor;
+    transform: rotate(-2deg);
+    background:transparent;
+  }
+  .stamp.dot::before{ content:''; width:6px; height:6px; border-radius:50%; background:currentColor; }
+
+  .view{ display:none; }
+  .view.active{ display:block; }
+
+  .sidebar-link{ transition: background .12s ease, color .12s ease; }
+  .sidebar-link.active{ background:#1B2C48; color:#fff; }
+  .sidebar-link.active .icon-dot{ background:#C68A1D; }
+
+  .modal-backdrop{ background:rgba(10,18,32,.55); backdrop-filter: blur(2px); }
+
+  input, select, textarea{ font-family:'Inter',sans-serif; }
+  input.font-num, select.font-num { font-family:'IBM Plex Mono', monospace; }
+
+  table thead th{ font-family:'IBM Plex Mono', monospace; letter-spacing:.06em; }
+
+  .toast{ animation: toastin .18s ease-out; }
+  @keyframes toastin{ from{ opacity:0; transform: translateY(8px);} to{opacity:1; transform:translateY(0);} }
+
+  .fade-in{ animation: fadein .15s ease-out; }
+  @keyframes fadein{ from{opacity:0} to{opacity:1} }
+
+  .ledger-tab{ writing-mode: vertical-rl; }
+
+  #sidebar{ transform: translateX(-100%); transition: transform .2s ease; }
+  #sidebar.sidebar-open{ transform: translateX(0); }
+  @media (min-width: 1024px){ #sidebar{ transform: translateX(0) !important; } }
+
+  @media (max-width: 639px){
+    table{ min-width: 640px; }
+  }
+
+  /* Vehicle daily sales sheet (print only) */
+  #vehPrintRoot{ display:none; }
+  .veh-sheet{ font-family: Arial, Helvetica, sans-serif; color:#000; page-break-after:always; }
+  .veh-sheet:last-child{ page-break-after:auto; }
+  .veh-sheet h2{ text-align:center; font-size:13px; font-weight:700; margin:0 0 3px; }
+  .veh-sheet .meta{ display:flex; justify-content:space-between; font-size:10px; margin-bottom:4px; }
+  .veh-sheet table{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:9px; }
+  .veh-sheet th, .veh-sheet td{ border:1px solid #000; padding:1px 3px; height:14px; line-height:12px; overflow:hidden; white-space:nowrap; }
+  .veh-sheet th{ font-size:9px; text-align:center; }
+  .veh-sheet td.n{ text-align:right; font-weight:600; }
+  .veh-sheet td.gap, .veh-sheet th.gap{ border-top:none; border-bottom:none; width:8px; padding:0; }
+  .veh-sheet thead{ display:table-header-group; }
+  .veh-sheet tr{ page-break-inside:avoid; }
+  .veh-sheet .sign{ display:flex; gap:24px; margin-top:22px; font-size:10px; }
+  .veh-sheet .sign div{ flex:1; border-top:1px solid #000; padding-top:3px; }
+  @media print{
+    body.printing-veh #loginScreen, body.printing-veh #appShell, body.printing-veh #toast{ display:none !important; }
+    body.printing-veh #vehPrintRoot{ display:block !important; }
+    @page{ size:A4; margin:8mm; }
+  }
+  @media print{
+    #sidebar, #sidebarOverlay, header, .nav-btn, #pendingBillsCard { display: none !important; }
+    #appShell, main, .view.active { display: block !important; }
+    main { padding: 0 !important; }
+    .lg\:ml-64 { margin-left: 0 !important; }
+  }
+</style>
+</head>
+<body class="text-navy-900">
+
+<!-- ============ LOGIN SCREEN ============ -->
+<div id="loginScreen" class="min-h-screen flex items-center justify-center px-4">
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center gap-2 mb-3">
+        <div class="w-9 h-9 rounded bg-navy-900 flex items-center justify-center">
+          <span class="font-display font-bold text-amber2-500 text-lg">L</span>
+        </div>
+        <span class="font-display font-bold text-xl text-navy-900">Ledger</span>
+      </div>
+      <p class="text-sm text-slate2-500">Stock & credit management for distributors</p>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-lg p-6 shadow-sm">
+      <h1 class="font-display font-semibold text-lg mb-4">Sign in</h1>
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs font-medium text-slate2-500 uppercase tracking-wide">Email</label>
+          <input id="loginEmail" type="email" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-700" placeholder="you@company.com" />
+        </div>
+        <div>
+          <label class="text-xs font-medium text-slate2-500 uppercase tracking-wide">Password</label>
+          <input id="loginPassword" type="password" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-700" placeholder="••••••••" />
+        </div>
+        <p id="loginError" class="text-xs text-brick-600 hidden"></p>
+        <button id="loginBtn" class="w-full bg-navy-900 hover:bg-navy-800 text-white font-medium text-sm rounded py-2.5 transition">Sign in</button>
+      </div>
+      <p class="text-xs text-slate2-400 mt-4 leading-relaxed">First time here? Create a user under <span class="font-num">Authentication → Users</span> in your Firebase console, then sign in above. See setup notes in the file comments.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP SHELL ============ -->
+<div id="appShell" class="hidden min-h-screen lg:flex">
+
+  <div id="sidebarOverlay" class="hidden fixed inset-0 bg-black/40 z-20 lg:hidden" onclick="toggleSidebar(false)"></div>
+
+  <!-- Sidebar -->
+  <aside id="sidebar" class="w-64 max-w-[80vw] shrink-0 bg-navy-950 text-slate-200 flex flex-col fixed inset-y-0 left-0 z-30">
+    <div class="px-5 py-5 flex items-center justify-between border-b border-white/10">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded bg-amber2-500 flex items-center justify-center">
+          <span class="font-display font-bold text-navy-950">L</span>
+        </div>
+        <div>
+          <div class="font-display font-semibold text-white text-sm leading-none" id="sidebarCompanyName">Ledger</div>
+          <div class="text-[11px] text-slate2-400 mt-0.5">Distributor system</div>
+        </div>
+      </div>
+      <button class="lg:hidden text-slate-300 hover:text-white text-lg leading-none" onclick="toggleSidebar(false)">✕</button>
+    </div>
+
+    <nav class="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
+      <button data-view="dashboard" class="nav-btn sidebar-link active w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm text-slate-300">
+        <span class="icon-dot w-1.5 h-1.5 rounded-full bg-slate2-400"></span> Dashboard
+      </button>
+      <button data-view="loading" class="nav-btn sidebar-link w-full flex items-center justify-between px-3 py-2.5 rounded text-sm text-slate-300">
+        <span class="flex items-center gap-3"><span class="icon-dot w-1.5 h-1.5 rounded-full bg-slate2-400"></span> Daily loading</span>
+        <span id="pendingBadge" class="hidden font-num text-[10px] bg-amber2-500 text-navy-950 rounded-full px-1.5 py-0.5">0</span>
+      </button>
+      <button data-view="vehicles" class="nav-btn sidebar-link w-full flex items-center justify-between px-3 py-2.5 rounded text-sm text-slate-300">
+        <span class="flex items-center gap-3"><span class="icon-dot w-1.5 h-1.5 rounded-full bg-slate2-400"></span> Vehicle sales</span>
+        <span id="vehBadge" class="hidden font-num text-[10px] bg-amber2-500 text-navy-950 rounded-full px-1.5 py-0.5">0</span>
+      </button>
+      <button data-view="products" class="nav-btn sidebar-link w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm text-slate-300">
+        <span class="icon-dot w-1.5 h-1.5 rounded-full bg-slate2-400"></span> Products
+      </button>
+      <button data-view="stock" class="nav-btn sidebar-link w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm text-slate-300">
+        <span class="icon-dot w-1.5 h-1.5 rounded-full bg-slate2-400"></span> Stock movements
+      </button>
+      <button data-view="shops" class="nav-btn sidebar-link w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm text-slate-300">
+        <span class="icon-dot w-1.5 h-1.5 rounded-full bg-slate2-400"></span> Retail shops
+      </button>
+      <button data-view="bills" class="nav-btn sidebar-link w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm text-slate-300">
+        <span class="icon-dot w-1.5 h-1.5 rounded-full bg-slate2-400"></span> Credit bills
+      </button>
+      <button data-view="payments" class="nav-btn sidebar-link w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm text-slate-300">
+        <span class="icon-dot w-1.5 h-1.5 rounded-full bg-slate2-400"></span> Payments
+      </button>
+      <button data-view="cheques" class="nav-btn sidebar-link w-full flex items-center justify-between px-3 py-2.5 rounded text-sm text-slate-300">
+        <span class="flex items-center gap-3"><span class="icon-dot w-1.5 h-1.5 rounded-full bg-slate2-400"></span> Cheque register</span>
+        <span id="chequeBadge" class="hidden font-num text-[10px] bg-brick-600 text-white rounded-full px-1.5 py-0.5">0</span>
+      </button>
+      <button data-view="overdue" class="nav-btn sidebar-link w-full flex items-center justify-between px-3 py-2.5 rounded text-sm text-slate-300">
+        <span class="flex items-center gap-3"><span class="icon-dot w-1.5 h-1.5 rounded-full bg-slate2-400"></span> Overdue bills</span>
+        <span id="overdueBadge" class="hidden font-num text-[10px] bg-brick-600 text-white rounded-full px-1.5 py-0.5">0</span>
+      </button>
+      <button data-view="expenses" class="nav-btn sidebar-link w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm text-slate-300">
+        <span class="icon-dot w-1.5 h-1.5 rounded-full bg-slate2-400"></span> Expenses
+      </button>
+      <button data-view="reports" class="nav-btn sidebar-link w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm text-slate-300">
+        <span class="icon-dot w-1.5 h-1.5 rounded-full bg-slate2-400"></span> Monthly reports
+      </button>
+      <div class="pt-3 mt-3 border-t border-white/10">
+        <button data-view="settings" class="nav-btn sidebar-link w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm text-slate-300">
+          <span class="icon-dot w-1.5 h-1.5 rounded-full bg-slate2-400"></span> Settings
+        </button>
+      </div>
+    </nav>
+
+    <div class="px-4 py-4 border-t border-white/10">
+      <div class="text-xs text-slate2-400 truncate" id="sidebarUserEmail">—</div>
+      <div class="text-[10px] font-num uppercase text-amber2-500 mb-2" id="sidebarUserRole">—</div>
+      <button id="logoutBtn" class="text-xs text-slate-300 hover:text-white underline underline-offset-2">Sign out</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="lg:ml-64 flex-1 min-h-screen flex flex-col w-full">
+    <header class="bg-white border-b border-slate-200 px-4 sm:px-8 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-10">
+      <div class="flex items-center gap-3 min-w-0">
+        <button class="lg:hidden text-navy-900 shrink-0" onclick="toggleSidebar(true)" aria-label="Open menu">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="min-w-0">
+          <h1 id="viewTitle" class="font-display font-semibold text-lg sm:text-xl text-navy-900 truncate">Dashboard</h1>
+          <p id="viewSubtitle" class="text-xs text-slate2-500 mt-0.5 truncate hidden sm:block">Overview of stock and outstanding credit</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 shrink-0">
+        <span class="font-num text-xs text-slate2-500 hidden sm:inline" id="todayDate"></span>
+      </div>
+    </header>
+
+    <main class="flex-1 px-4 sm:px-8 py-4 sm:py-6">
+
+      <!-- ===== DASHBOARD ===== -->
+      <section id="view-dashboard" class="view active fade-in">
+        <div id="pendingBanner" class="hidden flex items-center justify-between bg-amber2-100 border border-amber2-500/30 rounded-lg px-4 py-3 mb-5 text-sm">
+          <span class="text-amber2-600"><strong id="pendingBannerText"></strong></span>
+          <button data-view="loading" class="nav-btn text-xs font-medium text-navy-900 underline underline-offset-2">Go to Daily loading →</button>
+        </div>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+          <div class="bg-white border border-slate-200 rounded-lg p-4">
+            <div class="text-xs text-slate2-500 uppercase tracking-wide font-num">Stock value</div>
+            <div id="statStockValue" class="font-display font-bold text-2xl mt-2 text-navy-900">—</div>
+            <div class="text-xs text-slate2-400 mt-1" id="statStockCount">—</div>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-lg p-4">
+            <div class="text-xs text-slate2-500 uppercase tracking-wide font-num">Outstanding credit</div>
+            <div id="statOutstanding" class="font-display font-bold text-2xl mt-2 text-navy-900">—</div>
+            <div class="text-xs text-slate2-400 mt-1" id="statOutstandingCount">—</div>
+          </div>
+          <div class="bg-brick-100 border border-brick-600/30 rounded-lg p-4">
+            <div class="text-xs text-brick-700 uppercase tracking-wide font-num">Overdue amount</div>
+            <div id="statOverdue" class="font-display font-bold text-2xl mt-2 text-brick-700">—</div>
+            <div class="text-xs text-brick-600 mt-1" id="statOverdueCount">—</div>
+          </div>
+          <div class="bg-amber2-100 border border-amber2-500/30 rounded-lg p-4">
+            <div class="text-xs text-amber2-600 uppercase tracking-wide font-num">Low stock items</div>
+            <div id="statLowStock" class="font-display font-bold text-2xl mt-2 text-amber2-600">—</div>
+            <div class="text-xs text-amber2-600 mt-1">At or below reorder level</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div class="col-span-2 bg-white border border-slate-200 rounded-lg">
+            <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h2 class="font-display font-semibold text-sm">Recent bills</h2>
+              <button data-view="bills" class="nav-btn text-xs text-navy-700 hover:underline">View all →</button>
+            </div>
+            <table class="w-full text-sm">
+              <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-100">
+                <th class="px-5 py-2 font-medium">Bill</th><th class="py-2 font-medium">Shop</th><th class="py-2 font-medium">Due</th><th class="py-2 font-medium text-right px-5">Balance</th>
+              </tr></thead>
+              <tbody id="dashRecentBills"></tbody>
+            </table>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-lg">
+            <div class="px-5 py-4 border-b border-slate-100">
+              <h2 class="font-display font-semibold text-sm">Aging summary</h2>
+            </div>
+            <div id="agingBuckets" class="p-5 space-y-3"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== DAILY LOADING ===== -->
+      <section id="view-loading" class="view fade-in">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div class="flex items-center gap-2">
+            <label class="text-xs text-slate2-500">Date</label>
+            <input id="loadingDate" type="date" class="border border-slate-300 rounded px-3 py-2 text-sm font-num" />
+          </div>
+          <p class="text-xs text-slate2-400">Create credit/daily bills for today — they start as <em>pending</em> and show up here to load. Nothing leaves stock until you press Complete this evening.</p>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-lg overflow-x-auto mb-6">
+          <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h2 class="font-display font-semibold text-sm">Loading list — goods to load on the vehicle</h2>
+            <button onclick="window.print()" class="text-xs text-navy-700 hover:underline">Print</button>
+          </div>
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-100 bg-slate-50">
+              <th class="px-5 py-3 font-medium">Product</th><th class="py-3 font-medium">Unit</th><th class="py-3 font-medium text-right px-5">Total qty to load</th>
+            </tr></thead>
+            <tbody id="loadingListTable"></tbody>
+          </table>
+          <div id="loadingListEmpty" class="hidden text-center py-14 text-slate2-400 text-sm">No pending bills for this date yet. Add today's credit/daily bills first — they'll be totalled up here automatically.</div>
+        </div>
+
+        <div id="pendingBillsCard" class="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+          <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h2 class="font-display font-semibold text-sm">Pending bills for this date</h2>
+            <span class="text-xs text-slate2-400">Confirm what was actually sold, cancel what wasn't</span>
+          </div>
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-100 bg-slate-50">
+              <th class="px-5 py-3 font-medium">Bill #</th><th class="py-3 font-medium">Type</th><th class="py-3 font-medium">Shop</th>
+              <th class="py-3 font-medium text-right">Total</th><th class="py-3 font-medium text-right px-5">Actions</th>
+            </tr></thead>
+            <tbody id="pendingBillsTable"></tbody>
+          </table>
+          <div id="pendingBillsEmpty" class="hidden text-center py-14 text-slate2-400 text-sm">No pending bills for this date.</div>
+        </div>
+      </section>
+
+      <!-- ===== VEHICLE DAILY SALES ===== -->
+      <section id="view-vehicles" class="view fade-in">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <input id="vehDate" type="date" class="border border-slate-300 rounded px-3 py-2 text-sm font-num" />
+            <div class="inline-flex rounded border border-slate-300 overflow-hidden text-sm bg-white">
+              <button id="vehTabV1" onclick="vehSetTab('V1')" class="px-4 py-2 font-medium">Vehicle 1</button>
+              <button id="vehTabV2" onclick="vehSetTab('V2')" class="px-4 py-2 font-medium border-l border-slate-300">Vehicle 2</button>
+            </div>
+            <input id="vehSearch" type="text" placeholder="Search product…" class="border border-slate-300 rounded px-3 py-2 text-sm w-full sm:w-56 focus:outline-none focus:ring-2 focus:ring-navy-700" />
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button onclick="printVehicleSheet(vehCurrent)" class="bg-navy-900 hover:bg-navy-800 text-white text-xs font-medium rounded px-3 py-2">🖨 Print this vehicle</button>
+            <button onclick="printVehicleSheet('both')" class="border border-navy-900 text-navy-900 hover:bg-slate-100 text-xs font-medium rounded px-3 py-2">🖨 Print both vehicles</button>
+          </div>
+        </div>
+
+        <div id="vehSummary" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4"></div>
+        <div id="vehWarn" class="space-y-2 mb-4"></div>
+
+        <div id="vehTableWrap" class="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+          <div class="px-5 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-3">
+              <h2 id="vehTitle" class="font-display font-semibold text-sm">Vehicle 1</h2>
+              <span id="vehStatusChips" class="flex flex-wrap items-center gap-2"></span>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-slate2-500">Driver</label>
+              <input id="vehDriver" type="text" placeholder="Driver name" class="border border-slate-300 rounded px-3 py-1.5 text-sm w-44" oninput="vehDriverInput(this.value)" />
+            </div>
+          </div>
+          <div id="vehActions" class="px-5 py-3 border-b border-slate-100 bg-slate-50 flex flex-wrap items-center gap-2"></div>
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-100 bg-slate-50">
+              <th class="px-5 py-3 font-medium">Product</th>
+              <th class="py-3 font-medium text-right">Open</th>
+              <th class="py-3 font-medium text-center">Re.Ld (morning)</th>
+              <th class="py-3 font-medium text-right">On vehicle</th>
+              <th class="py-3 font-medium text-center">Close (evening)</th>
+              <th class="py-3 font-medium text-right">Sales qty</th>
+              <th class="py-3 font-medium text-right px-5">Sales value</th>
+            </tr></thead>
+            <tbody id="vehTable"></tbody>
+            <tfoot id="vehFoot"></tfoot>
+          </table>
+          <div id="vehEmpty" class="hidden text-center py-14 text-slate2-400 text-sm">No products yet — add products first.</div>
+        </div>
+        <p class="text-xs text-slate2-400 mt-3 leading-relaxed">Sales = Open (yesterday's closing balance) + Re.Ld (today's loading) − Close (evening count). Approving the <strong>loading</strong> deducts it from main stock. Approving the <strong>closing</strong> locks the day's sales and becomes tomorrow's opening balance.</p>
+      </section>
+
+      <!-- ===== PRODUCTS ===== -->
+      <section id="view-products" class="view fade-in">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <input id="productSearch" type="text" placeholder="Search products…" class="border border-slate-300 rounded px-3 py-2 text-sm w-full sm:w-72 focus:outline-none focus:ring-2 focus:ring-navy-700" />
+          <button onclick="openProductModal()" class="bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded px-4 py-2">+ Add product</button>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-100 bg-slate-50">
+              <th class="px-5 py-3 font-medium">SKU</th><th class="py-3 font-medium">Name</th><th class="py-3 font-medium">Unit</th>
+              <th class="py-3 font-medium text-right">Cost</th><th class="py-3 font-medium text-right">Price</th>
+              <th class="py-3 font-medium text-right">Stock</th><th class="py-3 font-medium text-right px-5">Actions</th>
+            </tr></thead>
+            <tbody id="productsTable"></tbody>
+          </table>
+          <div id="productsEmpty" class="hidden text-center py-14 text-slate2-400 text-sm">No products yet — add your first item to start tracking stock.</div>
+        </div>
+      </section>
+
+      <!-- ===== STOCK MOVEMENTS ===== -->
+      <section id="view-stock" class="view fade-in">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div class="flex flex-wrap gap-2">
+            <button onclick="openStockModal('in')" class="bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium rounded px-4 py-2">↓ Stock in (from mother company)</button>
+            <button onclick="openStockModal('out')" class="bg-brick-600 hover:bg-brick-700 text-white text-sm font-medium rounded px-4 py-2">↑ Stock out / adjustment</button>
+          </div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-100 bg-slate-50">
+              <th class="px-5 py-3 font-medium">Date</th><th class="py-3 font-medium">Product</th><th class="py-3 font-medium">Type</th>
+              <th class="py-3 font-medium">Reference</th><th class="py-3 font-medium text-right px-5">Qty</th>
+            </tr></thead>
+            <tbody id="stockTable"></tbody>
+          </table>
+          <div id="stockEmpty" class="hidden text-center py-14 text-slate2-400 text-sm">No stock movements recorded yet.</div>
+        </div>
+      </section>
+
+      <!-- ===== SHOPS ===== -->
+      <section id="view-shops" class="view fade-in">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <input id="shopSearch" type="text" placeholder="Search retail shops…" class="border border-slate-300 rounded px-3 py-2 text-sm w-full sm:w-72 focus:outline-none focus:ring-2 focus:ring-navy-700" />
+          <button onclick="openShopModal()" class="bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded px-4 py-2">+ Add shop</button>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-100 bg-slate-50">
+              <th class="px-5 py-3 font-medium">Shop</th><th class="py-3 font-medium">Contact</th><th class="py-3 font-medium">Address</th>
+              <th class="py-3 font-medium text-right">Credit limit</th><th class="py-3 font-medium text-right">Outstanding</th><th class="py-3 font-medium text-right px-5">Actions</th>
+            </tr></thead>
+            <tbody id="shopsTable"></tbody>
+          </table>
+          <div id="shopsEmpty" class="hidden text-center py-14 text-slate2-400 text-sm">No retail shops yet — add the shops you deliver to.</div>
+        </div>
+      </section>
+
+      <!-- ===== BILLS ===== -->
+      <section id="view-bills" class="view fade-in">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div class="flex flex-wrap gap-2 items-center">
+            <input id="billSearch" type="text" placeholder="Search bill # or shop…" class="border border-slate-300 rounded px-3 py-2 text-sm w-full sm:w-56 focus:outline-none focus:ring-2 focus:ring-navy-700" />
+            <select id="billTypeFilter" class="border border-slate-300 rounded px-3 py-2 text-sm">
+              <option value="all">All bill types</option>
+              <option value="credit">Credit bills</option>
+              <option value="cash">Daily (cash) bills</option>
+            </select>
+            <select id="billConfirmFilter" class="border border-slate-300 rounded px-3 py-2 text-sm">
+              <option value="all">Pending + confirmed</option>
+              <option value="pending">Pending only</option>
+              <option value="confirmed">Confirmed only</option>
+              <option value="cancelled">Cancelled only</option>
+            </select>
+            <select id="billStatusFilter" class="border border-slate-300 rounded px-3 py-2 text-sm">
+              <option value="all">All statuses</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="partial">Partial</option>
+              <option value="paid">Paid</option>
+              <option value="overdue">Overdue only</option>
+            </select>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button onclick="openBillModal('cash')" class="bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium rounded px-4 py-2">+ New daily bill</button>
+            <button onclick="openBillModal('credit')" class="bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded px-4 py-2">+ New credit bill</button>
+          </div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-100 bg-slate-50">
+              <th class="px-5 py-3 font-medium">Bill #</th><th class="py-3 font-medium">Type</th><th class="py-3 font-medium">Shop</th><th class="py-3 font-medium">Date</th>
+              <th class="py-3 font-medium">Due</th><th class="py-3 font-medium text-right">Total</th><th class="py-3 font-medium text-right">Paid</th>
+              <th class="py-3 font-medium text-right">Balance</th><th class="py-3 font-medium">Status</th><th class="py-3 font-medium text-right px-5">Actions</th>
+            </tr></thead>
+            <tbody id="billsTable"></tbody>
+          </table>
+          <div id="billsEmpty" class="hidden text-center py-14 text-slate2-400 text-sm">No bills yet.</div>
+        </div>
+      </section>
+
+      <!-- ===== PAYMENTS ===== -->
+      <section id="view-payments" class="view fade-in">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <h2 class="font-display font-semibold text-sm text-slate2-500">All recorded payments</h2>
+          <button onclick="openPaymentModal()" class="bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded px-4 py-2">+ Record payment</button>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-100 bg-slate-50">
+              <th class="px-5 py-3 font-medium">Date</th><th class="py-3 font-medium">Bill #</th><th class="py-3 font-medium">Shop</th>
+              <th class="py-3 font-medium">Method</th><th class="py-3 font-medium text-right px-5">Amount</th>
+            </tr></thead>
+            <tbody id="paymentsTable"></tbody>
+          </table>
+          <div id="paymentsEmpty" class="hidden text-center py-14 text-slate2-400 text-sm">No payments recorded yet.</div>
+        </div>
+      </section>
+
+      <!-- ===== CHEQUE REGISTER ===== -->
+      <section id="view-cheques" class="view fade-in">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-5">
+          <div class="bg-white border border-slate-200 rounded-lg p-4">
+            <div class="text-[10px] font-num uppercase text-slate2-500">Incoming pending</div>
+            <div id="chqIncomingPending" class="font-display font-bold text-xl mt-1 text-forest-700">—</div>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-lg p-4">
+            <div class="text-[10px] font-num uppercase text-slate2-500">Outgoing pending</div>
+            <div id="chqOutgoingPending" class="font-display font-bold text-xl mt-1">—</div>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-lg p-4">
+            <div class="text-[10px] font-num uppercase text-slate2-500">Cleared (all time)</div>
+            <div id="chqCleared" class="font-display font-bold text-xl mt-1">—</div>
+          </div>
+          <div class="bg-brick-100 border border-brick-600/30 rounded-lg p-4">
+            <div class="text-[10px] font-num uppercase text-brick-700">Bounced</div>
+            <div id="chqBounced" class="font-display font-bold text-xl mt-1 text-brick-700">—</div>
+          </div>
+        </div>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <select id="chequeFilter" class="border border-slate-300 rounded px-3 py-2 text-sm">
+            <option value="pending">Pending only</option>
+            <option value="all">All cheques</option>
+            <option value="cleared">Cleared only</option>
+            <option value="bounced">Bounced only</option>
+          </select>
+          <p class="text-xs text-slate2-400">Cheques are picked up automatically from daily bills, stock purchases, and expenses paid by cheque.</p>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-100 bg-slate-50">
+              <th class="px-5 py-3 font-medium">Cheque #</th><th class="py-3 font-medium">Bank</th><th class="py-3 font-medium">Direction</th>
+              <th class="py-3 font-medium">Party</th><th class="py-3 font-medium">Due date</th><th class="py-3 font-medium text-right">Amount</th>
+              <th class="py-3 font-medium text-right px-5">Status</th>
+            </tr></thead>
+            <tbody id="chequeTable"></tbody>
+          </table>
+          <div id="chequeEmpty" class="hidden text-center py-14 text-slate2-400 text-sm">No cheques recorded yet.</div>
+        </div>
+      </section>
+
+      <!-- ===== OVERDUE ===== -->
+      <section id="view-overdue" class="view fade-in">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-5">
+          <div class="bg-white border border-slate-200 rounded-lg p-4"><div class="text-[10px] font-num uppercase text-slate2-500">0–30 days</div><div id="ageBucket0" class="font-display font-bold text-xl mt-1">—</div></div>
+          <div class="bg-white border border-slate-200 rounded-lg p-4"><div class="text-[10px] font-num uppercase text-slate2-500">31–60 days</div><div id="ageBucket1" class="font-display font-bold text-xl mt-1">—</div></div>
+          <div class="bg-white border border-slate-200 rounded-lg p-4"><div class="text-[10px] font-num uppercase text-slate2-500">61–90 days</div><div id="ageBucket2" class="font-display font-bold text-xl mt-1">—</div></div>
+          <div class="bg-brick-100 border border-brick-600/30 rounded-lg p-4"><div class="text-[10px] font-num uppercase text-brick-700">90+ days</div><div id="ageBucket3" class="font-display font-bold text-xl mt-1 text-brick-700">—</div></div>
+        </div>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <label class="flex items-center gap-2 text-sm text-slate2-500">
+            <input id="only30Toggle" type="checkbox" class="rounded border-slate-300" />
+            Show only bills 30+ days overdue
+          </label>
+          <div class="flex flex-wrap items-center gap-2">
+            <span id="overdueTotalLabel" class="text-sm font-num text-brick-700 font-semibold"></span>
+            <button onclick="sendOverdueListToBoss()" class="bg-navy-900 hover:bg-navy-800 text-white text-xs font-medium rounded px-3 py-2 whitespace-nowrap">✉ Email to boss</button>
+            <button onclick="sendOverdueListWhatsApp()" class="bg-forest-600 hover:bg-forest-700 text-white text-xs font-medium rounded px-3 py-2 whitespace-nowrap">✆ WhatsApp to boss</button>
+          </div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-100 bg-slate-50">
+              <th class="px-5 py-3 font-medium">Bill #</th><th class="py-3 font-medium">Shop</th><th class="py-3 font-medium">Phone</th>
+              <th class="py-3 font-medium">Due date</th><th class="py-3 font-medium text-right">Days overdue</th>
+              <th class="py-3 font-medium text-right">Balance</th><th class="py-3 font-medium text-right px-5">Actions</th>
+            </tr></thead>
+            <tbody id="overdueTable"></tbody>
+          </table>
+          <div id="overdueEmpty" class="hidden text-center py-14 text-slate2-400 text-sm">Nothing overdue right now — all bills are within terms.</div>
+        </div>
+      </section>
+
+      <!-- ===== EXPENSES ===== -->
+      <section id="view-expenses" class="view fade-in">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <input id="expenseMonthFilter" type="month" class="border border-slate-300 rounded px-3 py-2 text-sm font-num" />
+          <button onclick="openExpenseModal()" class="bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded px-4 py-2">+ Add expense</button>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-lg overflow-x-auto mb-4">
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-100 bg-slate-50">
+              <th class="px-5 py-3 font-medium">Date</th><th class="py-3 font-medium">Category</th><th class="py-3 font-medium">Method</th>
+              <th class="py-3 font-medium">Note</th><th class="py-3 font-medium text-right">Amount</th><th class="py-3 font-medium text-right px-5">Actions</th>
+            </tr></thead>
+            <tbody id="expensesTable"></tbody>
+          </table>
+          <div id="expensesEmpty" class="hidden text-center py-14 text-slate2-400 text-sm">No expenses recorded for this month.</div>
+        </div>
+        <div class="flex justify-end">
+          <div class="bg-white border border-slate-200 rounded-lg px-5 py-3 text-sm">
+            <span class="text-slate2-500">Month total:</span>
+            <span id="expenseMonthTotal" class="font-num font-semibold ml-2">—</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== MONTHLY REPORTS ===== -->
+      <section id="view-reports" class="view fade-in">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5">
+          <input id="reportMonth" type="month" class="border border-slate-300 rounded px-3 py-2 text-sm font-num" />
+          <span class="text-xs text-slate2-400">All figures for the selected month unless noted</span>
+        </div>
+
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-5">
+          <div class="bg-white border border-slate-200 rounded-lg p-4">
+            <div class="text-[10px] font-num uppercase text-slate2-500">Sales revenue</div>
+            <div id="repSales" class="font-display font-bold text-xl mt-1">—</div>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-lg p-4">
+            <div class="text-[10px] font-num uppercase text-slate2-500">Cost of goods sold</div>
+            <div id="repCogs" class="font-display font-bold text-xl mt-1">—</div>
+          </div>
+          <div class="bg-forest-100 border border-forest-600/30 rounded-lg p-4">
+            <div class="text-[10px] font-num uppercase text-forest-700">Gross profit</div>
+            <div id="repGrossProfit" class="font-display font-bold text-xl mt-1 text-forest-700">—</div>
+          </div>
+          <div class="bg-navy-900 rounded-lg p-4">
+            <div class="text-[10px] font-num uppercase text-slate-300">Net profit</div>
+            <div id="repNetProfit" class="font-display font-bold text-xl mt-1 text-white">—</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+          <div class="bg-white border border-slate-200 rounded-lg p-5">
+            <h3 class="font-display font-semibold text-sm mb-3">Purchases (goods received)</h3>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between"><span class="text-slate2-500">Total purchases</span><span id="repPurchaseTotal" class="font-num font-semibold">—</span></div>
+              <div class="flex justify-between"><span class="text-slate2-500">Paid — Cash</span><span id="repPurchaseCash" class="font-num">—</span></div>
+              <div class="flex justify-between"><span class="text-slate2-500">Paid — Cheque</span><span id="repPurchaseCheque" class="font-num">—</span></div>
+              <div class="flex justify-between"><span class="text-slate2-500">On credit (unpaid)</span><span id="repPurchaseCredit" class="font-num">—</span></div>
+            </div>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-lg p-5">
+            <h3 class="font-display font-semibold text-sm mb-3">Expenses</h3>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between"><span class="text-slate2-500">Total expenses</span><span id="repExpenseTotal" class="font-num font-semibold">—</span></div>
+              <div class="flex justify-between"><span class="text-slate2-500">Paid — Cash</span><span id="repExpenseCash" class="font-num">—</span></div>
+              <div class="flex justify-between"><span class="text-slate2-500">Paid — Cheque</span><span id="repExpenseCheque" class="font-num">—</span></div>
+            </div>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-lg p-5">
+            <h3 class="font-display font-semibold text-sm mb-3">Collections from shops</h3>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between"><span class="text-slate2-500">Collected this month</span><span id="repCollections" class="font-num font-semibold">—</span></div>
+              <div class="flex justify-between"><span class="text-slate2-500">— Cash</span><span id="repCollectionsCash" class="font-num">—</span></div>
+              <div class="flex justify-between"><span class="text-slate2-500">— Cheque</span><span id="repCollectionsCheque" class="font-num">—</span></div>
+              <div class="flex justify-between"><span class="text-slate2-500">Total outstanding (all time)</span><span id="repOutstandingAll" class="font-num text-brick-600">—</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-lg mb-5">
+          <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="font-display font-semibold text-sm">Daily sales trend</h3>
+            <span class="text-xs text-slate2-400">Confirmed bills, selected month</span>
+          </div>
+          <div class="p-5">
+            <canvas id="salesTrendChart" height="90"></canvas>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+          <div class="bg-white border border-slate-200 rounded-lg">
+            <div class="px-5 py-4 border-b border-slate-100"><h3 class="font-display font-semibold text-sm">Top products this month</h3></div>
+            <div id="topProductsList" class="p-5 space-y-3"></div>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-lg">
+            <div class="px-5 py-4 border-b border-slate-100"><h3 class="font-display font-semibold text-sm">Top shops this month</h3></div>
+            <div id="topShopsList" class="p-5 space-y-3"></div>
+          </div>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-lg">
+          <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="font-display font-semibold text-sm">Collections vs outstanding, by shop</h3>
+          </div>
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-100 bg-slate-50">
+              <th class="px-5 py-3 font-medium">Shop</th><th class="py-3 font-medium text-right">Billed this month</th>
+              <th class="py-3 font-medium text-right">Collected this month</th><th class="py-3 font-medium text-right px-5">Outstanding now</th>
+            </tr></thead>
+            <tbody id="repShopTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===== SETTINGS ===== -->
+      <section id="view-settings" class="view fade-in max-w-lg">
+        <div class="bg-white border border-slate-200 rounded-lg p-6 space-y-4">
+          <div>
+            <label class="text-xs font-medium text-slate2-500 uppercase tracking-wide">Company name</label>
+            <input id="settingsCompanyName" type="text" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate2-500 uppercase tracking-wide">Currency symbol</label>
+            <input id="settingsCurrency" type="text" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate2-500 uppercase tracking-wide">Default credit term (days)</label>
+            <input id="settingsCreditTerm" type="number" min="1" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" />
+            <p class="text-xs text-slate2-400 mt-1">Used to auto-calculate the due date on new bills.</p>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate2-500 uppercase tracking-wide">Boss's email</label>
+            <input id="settingsBossEmail" type="email" placeholder="boss@example.com" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" />
+            <p class="text-xs text-slate2-400 mt-1">Used by "Email full list to boss" on the Overdue bills page.</p>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate2-500 uppercase tracking-wide">Boss's WhatsApp number</label>
+            <input id="settingsBossPhone" type="tel" placeholder="07XXXXXXXX or +94..." class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" />
+            <p class="text-xs text-slate2-400 mt-1">Used by "WhatsApp full list to boss". Local 10-digit numbers are converted automatically.</p>
+          </div>
+          <button onclick="saveSettings()" class="bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded px-4 py-2">Save settings</button>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-lg p-6 space-y-4 mt-5">
+          <div>
+            <h2 class="font-display font-semibold text-sm">Automatic email sending (optional)</h2>
+            <p class="text-xs text-slate2-500 mt-1 leading-relaxed">Without this, the Email buttons just open your device's email app with the message pre-filled — you still have to press Send there, and it needs a default mail app configured. Fill these in to send automatically instead, with no app switch. Free account at <a href="https://www.emailjs.com" target="_blank" class="text-navy-700 underline">emailjs.com</a> — connect your Gmail/Outlook, create a template with variables <span class="font-num">to_email</span>, <span class="font-num">subject</span>, <span class="font-num">message</span>, then paste the 3 IDs below.</p>
+          </div>
+          <div><label class="text-xs font-medium text-slate2-500 uppercase tracking-wide">EmailJS Service ID</label><input id="settingsEmailjsService" type="text" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+          <div><label class="text-xs font-medium text-slate2-500 uppercase tracking-wide">EmailJS Template ID</label><input id="settingsEmailjsTemplate" type="text" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+          <div><label class="text-xs font-medium text-slate2-500 uppercase tracking-wide">EmailJS Public Key</label><input id="settingsEmailjsKey" type="text" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+          <button onclick="saveSettings()" class="bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded px-4 py-2">Save settings</button>
+        </div>
+
+        <div id="teamCard" class="hidden bg-white border border-slate-200 rounded-lg p-6 space-y-4 mt-5">
+          <div>
+            <h2 class="font-display font-semibold text-sm">Team & access</h2>
+            <p class="text-xs text-slate2-500 mt-1 leading-relaxed">Controls what each signed-in email can see. <strong>Owner</strong> sees everything. <strong>Office</strong> sees everything except this Team card. <strong>Driver</strong> only sees Dashboard, Daily loading, and Bills (to create pending bills) — no Delete, Complete, Cancel, or financial reports. Create the login itself in Firebase Console → Authentication first, then assign their role here before they sign in — unrecognised emails default to Driver automatically.</p>
+          </div>
+          <div id="teamList" class="space-y-2"></div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-3 border-t border-slate-100">
+            <input id="teamEmail" type="email" placeholder="email@example.com" class="border border-slate-300 rounded px-3 py-2 text-sm" />
+            <select id="teamRole" class="border border-slate-300 rounded px-3 py-2 text-sm">
+              <option value="office">Office</option>
+              <option value="driver">Driver</option>
+              <option value="owner">Owner</option>
+            </select>
+            <button onclick="addTeamMember()" class="bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded px-4 py-2">Add / update</button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ============ MODALS ============ -->
+
+<!-- Product Modal -->
+<div id="productModal" class="hidden fixed inset-0 modal-backdrop z-40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-lg w-full max-w-md p-6 fade-in">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="productModalTitle" class="font-display font-semibold text-lg">Add product</h3>
+      <button onclick="closeModal('productModal')" class="text-slate2-400 hover:text-navy-900">✕</button>
+    </div>
+    <input type="hidden" id="productId" />
+    <div class="space-y-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div><label class="text-xs text-slate2-500">SKU</label><input id="productSku" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+        <div><label class="text-xs text-slate2-500">Unit</label><input id="productUnit" placeholder="pcs, box, kg…" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" /></div>
+      </div>
+      <div><label class="text-xs text-slate2-500">Product name</label><input id="productName" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" /></div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div><label class="text-xs text-slate2-500">Cost price</label><input id="productCost" type="number" step="0.01" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+        <div><label class="text-xs text-slate2-500">Selling price</label><input id="productPrice" type="number" step="0.01" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div><label class="text-xs text-slate2-500">Opening stock</label><input id="productStock" type="number" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+        <div><label class="text-xs text-slate2-500">Reorder level</label><input id="productReorder" type="number" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+      </div>
+    </div>
+    <div class="flex gap-2 mt-5">
+      <button onclick="saveProduct()" class="flex-1 bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded py-2.5">Save product</button>
+      <button onclick="closeModal('productModal')" class="px-4 text-sm text-slate2-500">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Stock Modal -->
+<div id="stockModal" class="hidden fixed inset-0 modal-backdrop z-40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-lg w-full max-w-md p-6 fade-in">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="stockModalTitle" class="font-display font-semibold text-lg">Stock in</h3>
+      <button onclick="closeModal('stockModal')" class="text-slate2-400 hover:text-navy-900">✕</button>
+    </div>
+    <input type="hidden" id="stockType" />
+    <div class="space-y-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div><label class="text-xs text-slate2-500">Product</label>
+          <select id="stockProduct" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm"></select>
+        </div>
+        <div><label class="text-xs text-slate2-500">Date</label><input id="stockDate" type="date" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div><label class="text-xs text-slate2-500">Quantity</label><input id="stockQty" type="number" min="1" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+        <div id="stockUnitCostWrap"><label class="text-xs text-slate2-500">Unit cost</label><input id="stockUnitCost" type="number" step="0.01" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+      </div>
+      <div id="stockPaymentWrap" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div><label class="text-xs text-slate2-500">Paid by</label>
+          <select id="stockPaymentMethod" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm">
+            <option value="cash">Cash</option>
+            <option value="cheque">Cheque</option>
+            <option value="credit">On credit (unpaid to supplier)</option>
+          </select>
+        </div>
+        <div id="stockChequeWrap" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3 col-span-2">
+          <div><label class="text-xs text-slate2-500">Cheque number</label><input id="stockChequeNo" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+          <div><label class="text-xs text-slate2-500">Bank</label><input id="stockChequeBank" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" /></div>
+          <div><label class="text-xs text-slate2-500">Cheque due date</label><input id="stockChequeDue" type="date" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+        </div>
+      </div>
+      <div><label class="text-xs text-slate2-500">Note / reference</label><input id="stockNote" placeholder="e.g. GRN #204 from mother company" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" /></div>
+    </div>
+    <div class="flex gap-2 mt-5">
+      <button onclick="saveStockMovement()" class="flex-1 bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded py-2.5">Save</button>
+      <button onclick="closeModal('stockModal')" class="px-4 text-sm text-slate2-500">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shop Modal -->
+<div id="shopModal" class="hidden fixed inset-0 modal-backdrop z-40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-lg w-full max-w-md p-6 fade-in">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="shopModalTitle" class="font-display font-semibold text-lg">Add retail shop</h3>
+      <button onclick="closeModal('shopModal')" class="text-slate2-400 hover:text-navy-900">✕</button>
+    </div>
+    <input type="hidden" id="shopId" />
+    <div class="space-y-3">
+      <div><label class="text-xs text-slate2-500">Shop name</label><input id="shopName" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" /></div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div><label class="text-xs text-slate2-500">Owner name</label><input id="shopOwner" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" /></div>
+        <div><label class="text-xs text-slate2-500">Phone</label><input id="shopPhone" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+      </div>
+      <div><label class="text-xs text-slate2-500">Email</label><input id="shopEmail" type="email" placeholder="shop@example.com" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" /></div>
+      <div><label class="text-xs text-slate2-500">Address</label><textarea id="shopAddress" rows="2" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm"></textarea></div>
+      <div><label class="text-xs text-slate2-500">Credit limit</label><input id="shopCreditLimit" type="number" step="0.01" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+    </div>
+    <div class="flex gap-2 mt-5">
+      <button onclick="saveShop()" class="flex-1 bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded py-2.5">Save shop</button>
+      <button onclick="closeModal('shopModal')" class="px-4 text-sm text-slate2-500">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bill Modal -->
+<div id="billModal" class="hidden fixed inset-0 modal-backdrop z-40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-lg w-full max-w-2xl p-6 fade-in max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="billModalTitle" class="font-display font-semibold text-lg">New credit bill</h3>
+      <button onclick="closeModal('billModal')" class="text-slate2-400 hover:text-navy-900">✕</button>
+    </div>
+
+    <div class="flex items-center gap-4 mb-4 bg-slate-50 border border-slate-200 rounded px-3 py-2">
+      <span class="text-xs text-slate2-500 font-medium">Bill type</span>
+      <label class="flex items-center gap-1.5 text-sm"><input type="radio" name="billTypeRadio" value="credit" id="billTypeCredit" /> Credit</label>
+      <label class="flex items-center gap-1.5 text-sm"><input type="radio" name="billTypeRadio" value="cash" id="billTypeCash" /> Daily bill (paid now)</label>
+      <span class="ml-auto text-xs text-slate2-400 font-num">Bill # will be <span id="billNoPreview" class="font-semibold text-navy-900">—</span></span>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+      <div><label class="text-xs text-slate2-500">Retail shop</label>
+        <select id="billShop" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm"></select>
+      </div>
+      <div><label class="text-xs text-slate2-500">Bill date</label><input id="billDate" type="date" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+      <div id="billDueDateWrap"><label class="text-xs text-slate2-500">Due date</label><input id="billDueDate" type="date" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+    </div>
+
+    <div id="billPaymentWrap" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+      <div><label class="text-xs text-slate2-500">Paid by</label>
+        <select id="billPaymentMethod" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm">
+          <option value="Cash">Cash</option>
+          <option value="Cheque">Cheque</option>
+        </select>
+      </div>
+      <div id="billChequeWrap" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3 sm:col-span-2">
+        <div><label class="text-xs text-slate2-500">Cheque number</label><input id="billChequeNo" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+        <div><label class="text-xs text-slate2-500">Bank</label><input id="billChequeBank" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" /></div>
+        <div><label class="text-xs text-slate2-500">Cheque due date</label><input id="billChequeDue" type="date" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+      </div>
+    </div>
+
+    <div class="border border-slate-200 rounded-lg overflow-x-auto mb-3">
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-[10px] text-slate2-400 bg-slate-50 border-b border-slate-100">
+          <th class="px-3 py-2 font-medium">Product</th><th class="py-2 font-medium w-20">Qty</th><th class="py-2 font-medium w-28">Price</th><th class="py-2 font-medium w-28 text-right">Line total</th><th class="w-8"></th>
+        </tr></thead>
+        <tbody id="billItemsBody"></tbody>
+      </table>
+    </div>
+    <button onclick="addBillItemRow()" class="text-xs text-navy-700 hover:underline mb-4">+ Add item</button>
+
+    <div class="flex justify-end">
+      <div class="w-56 space-y-1 text-sm">
+        <div class="flex justify-between"><span class="text-slate2-500">Subtotal</span><span id="billSubtotal" class="font-num">0.00</span></div>
+        <div class="flex justify-between items-center"><span class="text-slate2-500">Discount</span><input id="billDiscount" type="number" step="0.01" value="0" class="w-24 border border-slate-300 rounded px-2 py-1 text-right font-num text-sm" /></div>
+        <div class="flex justify-between font-semibold text-base pt-1 border-t border-slate-200"><span>Total</span><span id="billTotal" class="font-num">0.00</span></div>
+      </div>
+    </div>
+
+    <div class="flex gap-2 mt-5">
+      <button onclick="saveBill()" class="flex-1 bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded py-2.5">Save bill</button>
+      <button onclick="closeModal('billModal')" class="px-4 text-sm text-slate2-500">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bill View Modal -->
+<div id="billViewModal" class="hidden fixed inset-0 modal-backdrop z-40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-lg w-full max-w-lg p-6 fade-in max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-display font-semibold text-lg">Bill details</h3>
+      <button onclick="closeModal('billViewModal')" class="text-slate2-400 hover:text-navy-900">✕</button>
+    </div>
+    <div id="billViewContent"></div>
+  </div>
+</div>
+
+<!-- Payment Modal -->
+<div id="paymentModal" class="hidden fixed inset-0 modal-backdrop z-40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-lg w-full max-w-md p-6 fade-in">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-display font-semibold text-lg">Record payment</h3>
+      <button onclick="closeModal('paymentModal')" class="text-slate2-400 hover:text-navy-900">✕</button>
+    </div>
+    <div class="space-y-3">
+      <div><label class="text-xs text-slate2-500">Bill</label>
+        <select id="paymentBill" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm"></select>
+      </div>
+      <div id="paymentBalanceHint" class="text-xs text-slate2-500"></div>
+      <div><label class="text-xs text-slate2-500">Amount</label><input id="paymentAmount" type="number" step="0.01" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+      <div><label class="text-xs text-slate2-500">Method</label>
+        <select id="paymentMethod" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm">
+          <option>Cash</option><option>Bank transfer</option><option>Cheque</option><option>Other</option>
+        </select>
+      </div>
+      <div><label class="text-xs text-slate2-500">Note</label><input id="paymentNote" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" /></div>
+    </div>
+    <div class="flex gap-2 mt-5">
+      <button onclick="savePayment()" class="flex-1 bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded py-2.5">Save payment</button>
+      <button onclick="closeModal('paymentModal')" class="px-4 text-sm text-slate2-500">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Expense Modal -->
+<div id="expenseModal" class="hidden fixed inset-0 modal-backdrop z-40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-lg w-full max-w-md p-6 fade-in">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="expenseModalTitle" class="font-display font-semibold text-lg">Add expense</h3>
+      <button onclick="closeModal('expenseModal')" class="text-slate2-400 hover:text-navy-900">✕</button>
+    </div>
+    <input type="hidden" id="expenseId" />
+    <div class="space-y-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div><label class="text-xs text-slate2-500">Date</label><input id="expenseDate" type="date" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+        <div><label class="text-xs text-slate2-500">Category</label>
+          <select id="expenseCategory" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm">
+            <option>Rent</option><option>Transport</option><option>Salaries</option><option>Utilities</option><option>Vehicle / fuel</option><option>Other</option>
+          </select>
+        </div>
+      </div>
+      <div><label class="text-xs text-slate2-500">Amount</label><input id="expenseAmount" type="number" step="0.01" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div><label class="text-xs text-slate2-500">Paid by</label>
+          <select id="expenseMethod" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm">
+            <option value="cash">Cash</option><option value="cheque">Cheque</option>
+          </select>
+        </div>
+        <div id="expenseChequeWrap" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3 sm:col-span-2">
+          <div><label class="text-xs text-slate2-500">Cheque number</label><input id="expenseChequeNo" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+          <div><label class="text-xs text-slate2-500">Bank</label><input id="expenseChequeBank" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" /></div>
+          <div><label class="text-xs text-slate2-500">Cheque due date</label><input id="expenseChequeDue" type="date" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+        </div>
+      </div>
+      <div><label class="text-xs text-slate2-500">Note</label><input id="expenseNote" class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm" /></div>
+    </div>
+    <div class="flex gap-2 mt-5">
+      <button onclick="saveExpense()" class="flex-1 bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded py-2.5">Save expense</button>
+      <button onclick="closeModal('expenseModal')" class="px-4 text-sm text-slate2-500">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shop Statement Modal -->
+<div id="statementModal" class="hidden fixed inset-0 modal-backdrop z-40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-lg w-full max-w-xl p-6 fade-in max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-display font-semibold text-lg">Shop statement</h3>
+      <button onclick="closeModal('statementModal')" class="text-slate2-400 hover:text-navy-900">✕</button>
+    </div>
+    <div class="flex items-center gap-3 mb-4">
+      <div class="flex-1"><label class="text-xs text-slate2-500">Shop</label><div id="statementShopName" class="font-medium text-sm mt-1"></div></div>
+      <div><label class="text-xs text-slate2-500">Month</label><input id="statementMonth" type="month" class="mt-1 border border-slate-300 rounded px-3 py-2 text-sm font-num" /></div>
+    </div>
+    <input type="hidden" id="statementShopId" />
+    <div id="statementContent"></div>
+  </div>
+</div>
+
+<!-- Confirm delete -->
+<div id="confirmModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-lg w-full max-w-sm p-6 fade-in">
+    <h3 class="font-display font-semibold text-lg mb-2">Are you sure?</h3>
+    <p id="confirmText" class="text-sm text-slate2-500 mb-5">This action cannot be undone.</p>
+    <div class="flex gap-2">
+      <button id="confirmYesBtn" class="flex-1 bg-brick-600 hover:bg-brick-700 text-white text-sm font-medium rounded py-2.5">Delete</button>
+      <button onclick="closeModal('confirmModal')" class="px-4 text-sm text-slate2-500">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Vehicle print sheet (filled by JS, shown only when printing) -->
+<div id="vehPrintRoot"></div>
+
+<!-- Toast -->
+<div id="toast" class="hidden fixed bottom-5 right-5 bg-navy-950 text-white text-sm px-4 py-3 rounded-lg shadow-lg z-50"></div>
+
+<!--
+  ============================================================
+  SETUP INSTRUCTIONS
+  ============================================================
+  1. Create a Firebase project at https://console.firebase.google.com
+  2. Enable Authentication → Sign-in method → Email/Password.
+     Add your staff as Users there (email + password).
+  3. Enable Firestore Database (production mode).
+  4. Copy your web app config into firebaseConfig below.
+  5. Basic Firestore security rules (Firestore → Rules) — anyone signed in can
+     read/write everything. This is fine for a small trusted team:
+
+     rules_version = '2';
+     service cloud.firestore {
+       match /databases/{database}/documents {
+         match /{document=**} {
+           allow read, write: if request.auth != null;
+         }
+       }
+     }
+
+     IMPORTANT: the app's Owner/Office/Driver roles (Settings → Team & access)
+     only hide menus and buttons in the browser — with the rules above, a
+     technically savvy Driver could still read/write anything via dev tools.
+     If that matters to you, use these role-aware rules instead, which check
+     each signed-in email's role in the "users" collection on the server side:
+
+     rules_version = '2';
+     service cloud.firestore {
+       match /databases/{database}/documents {
+         function role() {
+           return get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role;
+         }
+         match /users/{email} {
+           allow read: if request.auth != null;
+           allow write: if request.auth != null && role() == 'owner';
+         }
+         match /vehicleLogs/{logId} {
+           allow read, create, update: if request.auth != null;
+           allow delete: if request.auth != null && role() in ['owner','office'];
+         }
+         match /bills/{billId} {
+           allow read, create: if request.auth != null;
+           allow update, delete: if request.auth != null && role() in ['owner','office'];
+         }
+         match /{document=**} {
+           allow read: if request.auth != null;
+           allow write: if request.auth != null && role() in ['owner','office'];
+         }
+       }
+     }
+
+  6. Open this HTML file in a browser (or host it anywhere static,
+     e.g. Firebase Hosting, Netlify, GitHub Pages). No build step needed.
+  ============================================================
+-->
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot,
+  query, orderBy, serverTimestamp, getDoc, getDocs, setDoc, runTransaction
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import {
+  getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+
+// ---------- Firebase config: REPLACE WITH YOUR OWN PROJECT VALUES ----------
+const firebaseConfig = {
+    apiKey: "AIzaSyAJT_tkH0GST-ad4UwmyeNK8eNB1zFakOA",
+    authDomain: "distri-755de.firebaseapp.com",
+    projectId: "distri-755de",
+    storageBucket: "distri-755de.firebasestorage.app",
+    messagingSenderId: "26990476354",
+    appId: "1:26990476354:web:97141e80c7e2e06ee001db",
+    measurementId: "G-JEQKG3GL1D"
+  };
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+const colProducts = collection(db, 'products');
+const colShops = collection(db, 'shops');
+const colBills = collection(db, 'bills');
+const colPayments = collection(db, 'payments');
+const colMovements = collection(db, 'stockMovements');
+const colExpenses = collection(db, 'expenses');
+const colUsers = collection(db, 'users');
+const colVehicleLogs = collection(db, 'vehicleLogs');
+const settingsDocRef = doc(db, 'settings', 'app');
+
+// ---------- State ----------
+let products = [], shops = [], bills = [], payments = [], movements = [], expenses = [], teamUsers = [], vehicleLogs = [];
+let settings = { companyName: 'My Distribution Co.', currency: 'Rs.', creditTermDays: 30, bossEmail: '', bossPhone: '', emailjsServiceId: '', emailjsTemplateId: '', emailjsPublicKey: '' };
+let activeView = 'dashboard';
+let currentUserRole = 'owner';
+let currentUserEmail = '';
+function isDriver(){ return currentUserRole === 'driver'; }
+function isOwner(){ return currentUserRole === 'owner'; }
+function canManage(){ return currentUserRole === 'owner' || currentUserRole === 'office'; }
+
+// ---------- Helpers ----------
+const $ = id => document.getElementById(id);
+const fmtMoney = n => `${settings.currency} ${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtDate = d => { if(!d) return '—'; const dt = (d instanceof Date) ? d : new Date(d); return dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); };
+const toDateOnly = d => { const dt = new Date(d); dt.setHours(0,0,0,0); return dt; };
+const todayDateOnly = () => toDateOnly(new Date());
+const daysOverdue = dueDate => Math.floor((todayDateOnly() - toDateOnly(dueDate)) / 86400000);
+
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.remove('hidden'); t.classList.add('toast');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(()=> t.classList.add('hidden'), 2600);
+}
+
+function closeModal(id){ $(id).classList.add('hidden'); }
+function openModalEl(id){ $(id).classList.remove('hidden'); }
+window.closeModal = closeModal;
+
+let confirmCallback = null;
+function askConfirm(text, cb){
+  $('confirmText').textContent = text;
+  confirmCallback = cb;
+  openModalEl('confirmModal');
+}
+$('confirmYesBtn').onclick = () => { if(confirmCallback) confirmCallback(); closeModal('confirmModal'); };
+
+// ---------- Auth ----------
+$('loginBtn').onclick = async () => {
+  const email = $('loginEmail').value.trim();
+  const pass = $('loginPassword').value;
+  $('loginError').classList.add('hidden');
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+  } catch(e) {
+    $('loginError').textContent = 'Sign-in failed — check email and password.';
+    $('loginError').classList.remove('hidden');
+  }
+};
+$('logoutBtn').onclick = () => signOut(auth);
+
+async function resolveUserRole(email){
+  const snap = await getDocs(colUsers);
+  if (snap.empty) {
+    // First-ever login on this Firebase project — that person becomes Owner automatically.
+    await setDoc(doc(db, 'users', email), { email, name: email, role: 'owner', createdAt: serverTimestamp() });
+    return 'owner';
+  }
+  const mine = snap.docs.find(d => d.id === email);
+  if (mine) return mine.data().role || 'driver';
+  // Unknown email, but other team members already exist — default to the most restricted role.
+  await setDoc(doc(db, 'users', email), { email, name: email, role: 'driver', createdAt: serverTimestamp() });
+  toast('No role assigned yet — starting with limited Driver access. Ask your admin.');
+  return 'driver';
+}
+
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    $('loginScreen').classList.add('hidden');
+    $('appShell').classList.remove('hidden');
+    $('sidebarUserEmail').textContent = user.email;
+    currentUserEmail = (user.email || '').toLowerCase();
+    try {
+      currentUserRole = await resolveUserRole(currentUserEmail);
+    } catch (err) {
+      console.error('Role lookup failed — defaulting to full access:', err);
+      currentUserRole = 'owner';
+      toast('Could not check team role — opened with full access');
+    }
+    $('sidebarUserRole').textContent = currentUserRole.charAt(0).toUpperCase() + currentUserRole.slice(1);
+    applyRoleRestrictions();
+    startListeners();
+  } else {
+    $('appShell').classList.add('hidden');
+    $('loginScreen').classList.remove('hidden');
+  }
+});
+
+function applyRoleRestrictions(){
+  const restrictedForDriver = ['products','stock','shops','payments','cheques','overdue','expenses','reports','settings'];
+  document.querySelectorAll('.nav-btn[data-view]').forEach(btn => {
+    const v = btn.dataset.view;
+    btn.classList.toggle('hidden', isDriver() && restrictedForDriver.includes(v));
+  });
+  const teamCard = $('teamCard');
+  if (teamCard) teamCard.classList.toggle('hidden', !isOwner());
+  if (isDriver() && restrictedForDriver.includes(activeView)) {
+    showView('loading');
+  } else {
+    showView(activeView);
+  }
+}
+
+// ---------- Sidebar (mobile) ----------
+function toggleSidebar(force){
+  const sb = $('sidebar');
+  const overlay = $('sidebarOverlay');
+  const shouldOpen = typeof force === 'boolean' ? force : !sb.classList.contains('sidebar-open');
+  sb.classList.toggle('sidebar-open', shouldOpen);
+  overlay.classList.toggle('hidden', !shouldOpen);
+}
+window.toggleSidebar = toggleSidebar;
+
+// ---------- Navigation ----------
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => showView(btn.dataset.view));
+});
+const viewMeta = {
+  dashboard: ['Dashboard', 'Overview of stock and outstanding credit'],
+  vehicles: ['Vehicle sales', 'Per-vehicle loading, evening balance and daily sales'],
+  loading: ['Daily loading', "Today's loading list, and pending bills to confirm or cancel"],
+  products: ['Products', 'Items received from the mother company'],
+  stock: ['Stock movements', 'Stock received and dispatched, with history'],
+  shops: ['Retail shops', 'Shops you deliver to on credit'],
+  bills: ['Credit bills', 'Invoices issued to retail shops'],
+  payments: ['Payments', 'Payments received against credit bills'],
+  cheques: ['Cheque register', 'Post-dated cheques in and out, with clearance status'],
+  overdue: ['Overdue bills', 'Bills past their due date, sorted by age'],
+  expenses: ['Expenses', 'Rent, transport, salaries and other costs'],
+  reports: ['Monthly reports', 'Sales, purchases, profit and collections by month'],
+  settings: ['Settings', 'Company and billing preferences'],
+};
+function showView(name){
+  activeView = name;
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  $('view-' + name).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  $('viewTitle').textContent = viewMeta[name][0];
+  $('viewSubtitle').textContent = viewMeta[name][1];
+  toggleSidebar(false);
+  renderAll();
+}
+window.showView = showView;
+
+$('todayDate').textContent = fmtDate(new Date());
+
+// ---------- Firestore listeners ----------
+function startListeners(){
+  getDoc(settingsDocRef).then(snap => {
+    if (snap.exists()) { settings = { ...settings, ...snap.data() }; }
+    else { setDoc(settingsDocRef, settings); }
+    $('sidebarCompanyName').textContent = settings.companyName;
+    $('settingsCompanyName').value = settings.companyName;
+    $('settingsCurrency').value = settings.currency;
+    $('settingsCreditTerm').value = settings.creditTermDays;
+    $('settingsBossEmail').value = settings.bossEmail || '';
+    $('settingsBossPhone').value = settings.bossPhone || '';
+    $('settingsEmailjsService').value = settings.emailjsServiceId || '';
+    $('settingsEmailjsTemplate').value = settings.emailjsTemplateId || '';
+    $('settingsEmailjsKey').value = settings.emailjsPublicKey || '';
+    renderAll();
+  });
+
+  onSnapshot(query(colProducts, orderBy('name')), snap => {
+    products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderAll();
+  });
+  onSnapshot(query(colShops, orderBy('name')), snap => {
+    shops = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderAll();
+  });
+  onSnapshot(query(colBills, orderBy('createdAt', 'desc')), snap => {
+    bills = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderAll();
+  });
+  onSnapshot(query(colPayments, orderBy('createdAt', 'desc')), snap => {
+    payments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderAll();
+  });
+  onSnapshot(query(colMovements, orderBy('createdAt', 'desc')), snap => {
+    movements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderAll();
+  });
+  onSnapshot(query(colExpenses, orderBy('date', 'desc')), snap => {
+    expenses = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderAll();
+  });
+  onSnapshot(colVehicleLogs, snap => {
+    vehicleLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderAll();
+  });
+  onSnapshot(colUsers, snap => {
+    teamUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderAll();
+  });
+}
+
+function renderAll(){
+  renderDashboard();
+  renderLoading();
+  renderVehicles();
+  renderProducts();
+  renderStock();
+  renderShops();
+  renderBills();
+  renderPayments();
+  renderCheques();
+  renderOverdue();
+  renderExpenses();
+  renderReports();
+  renderTeam();
+  updateOverdueBadge();
+  updatePendingBadge();
+  updateChequeBadge();
+}
+
+// Month helpers
+const currentMonthStr = () => new Date().toISOString().slice(0,7); // YYYY-MM
+const inMonth = (dateStr, monthStr) => !!dateStr && dateStr.slice(0,7) === monthStr;
+if ($('expenseMonthFilter')) $('expenseMonthFilter').value = currentMonthStr();
+if ($('reportMonth')) $('reportMonth').value = currentMonthStr();
+if ($('loadingDate')) $('loadingDate').value = new Date().toISOString().slice(0,10);
+$('loadingDate')?.addEventListener('change', renderLoading);
+
+function updatePendingBadge(){
+  const n = bills.filter(b => (b.billStatus||'confirmed') === 'pending').length;
+  const el = $('pendingBadge');
+  if (!el) return;
+  if (n > 0) { el.textContent = n; el.classList.remove('hidden'); } else { el.classList.add('hidden'); }
+}
+
+function renderLoading(){
+  if (activeView !== 'loading') return;
+  const date = $('loadingDate').value || new Date().toISOString().slice(0,10);
+  const pending = bills.filter(b => (b.billStatus||'confirmed') === 'pending' && b.date === date);
+
+  const agg = {};
+  pending.forEach(b => (b.items||[]).forEach(it => {
+    if (!agg[it.productId]) {
+      const prod = products.find(p=>p.id===it.productId);
+      agg[it.productId] = { name: it.name, unit: prod ? (prod.unit||'pcs') : 'pcs', qty: 0 };
+    }
+    agg[it.productId].qty += it.qty;
+  }));
+  const aggRows = Object.values(agg).sort((a,b)=> a.name.localeCompare(b.name));
+
+  $('loadingListEmpty').classList.toggle('hidden', aggRows.length !== 0);
+  $('loadingListTable').innerHTML = aggRows.map(r => `
+    <tr class="border-b border-slate-50 last:border-0">
+      <td class="px-5 py-3 font-medium">${r.name}</td>
+      <td class="py-3 text-slate2-500">${r.unit}</td>
+      <td class="py-3 px-5 text-right font-num font-semibold">${r.qty}</td>
+    </tr>`).join('');
+
+  $('pendingBillsEmpty').classList.toggle('hidden', pending.length !== 0);
+  $('pendingBillsTable').innerHTML = pending.map(b => `
+    <tr class="border-b border-slate-50 last:border-0">
+      <td class="px-5 py-3 font-num text-xs">${b.billNo}</td>
+      <td class="py-3"><span class="stamp ${b.billType==='cash'?'text-forest-600':'text-navy-700'} text-[9px] px-1.5 py-0">${b.billType==='cash'?'daily':'credit'}</span></td>
+      <td class="py-3">${b.shopName}</td>
+      <td class="py-3 text-right font-num">${fmtMoney(b.total)}</td>
+      <td class="py-3 px-5 text-right whitespace-nowrap">
+        <button onclick="viewBill('${b.id}')" class="text-xs text-navy-700 hover:underline mr-3">View</button>
+        ${canManage() ? `
+          <button onclick="completeBill('${b.id}')" class="text-xs text-forest-700 hover:underline mr-3">Complete</button>
+          <button onclick="cancelBillPending('${b.id}')" class="text-xs text-brick-600 hover:underline">Cancel</button>
+        ` : ''}
+      </td>
+    </tr>`).join('');
+}
+
+// ---------- Settings ----------
+window.saveSettings = async () => {
+  settings.companyName = $('settingsCompanyName').value.trim() || 'My Distribution Co.';
+  settings.currency = $('settingsCurrency').value.trim() || 'Rs.';
+  settings.creditTermDays = Number($('settingsCreditTerm').value) || 30;
+  settings.bossEmail = $('settingsBossEmail').value.trim();
+  settings.bossPhone = $('settingsBossPhone').value.trim();
+  settings.emailjsServiceId = $('settingsEmailjsService').value.trim();
+  settings.emailjsTemplateId = $('settingsEmailjsTemplate').value.trim();
+  settings.emailjsPublicKey = $('settingsEmailjsKey').value.trim();
+  await setDoc(settingsDocRef, settings);
+  $('sidebarCompanyName').textContent = settings.companyName;
+  toast('Settings saved');
+  renderAll();
+};
+
+// ---------- Team & access ----------
+function renderTeam(){
+  if (activeView !== 'settings' || !isOwner()) return;
+  $('teamList').innerHTML = teamUsers.length ? teamUsers.map(u => `
+    <div class="flex items-center justify-between gap-2 text-sm border-b border-slate-50 pb-2">
+      <div class="truncate">${u.email}${u.email === currentUserEmail ? ' <span class="text-slate2-400">(you)</span>' : ''}</div>
+      <div class="flex items-center gap-2 shrink-0">
+        <select onchange="updateTeamRole('${u.id}', this.value)" class="border border-slate-300 rounded px-2 py-1 text-xs">
+          <option value="owner" ${u.role==='owner'?'selected':''}>Owner</option>
+          <option value="office" ${u.role==='office'?'selected':''}>Office</option>
+          <option value="driver" ${u.role==='driver'?'selected':''}>Driver</option>
+        </select>
+        <button onclick="removeTeamMember('${u.id}')" class="text-xs text-brick-600 hover:underline">Remove</button>
+      </div>
+    </div>`).join('') : `<div class="text-xs text-slate2-400">No team members added yet — you're the Owner by default as the first person to sign in.</div>`;
+}
+window.addTeamMember = async () => {
+  const email = $('teamEmail').value.trim().toLowerCase();
+  const role = $('teamRole').value;
+  if (!email) { toast('Enter an email'); return; }
+  await setDoc(doc(db, 'users', email), { email, role, name: email, createdAt: serverTimestamp() }, { merge: true });
+  toast('Team member saved');
+  $('teamEmail').value = '';
+};
+window.updateTeamRole = async (id, role) => {
+  await updateDoc(doc(db, 'users', id), { role });
+  toast('Role updated');
+};
+window.removeTeamMember = (id) => {
+  askConfirm("Remove this person's access record? They'll default to Driver (most restricted) access next time they sign in unless re-added.", async () => {
+    await deleteDoc(doc(db, 'users', id));
+    toast('Removed');
+  });
+};
+
+// ================= DASHBOARD =================
+function renderDashboard(){
+  if (activeView !== 'dashboard') return;
+  const stockValue = products.reduce((s,p) => s + (Number(p.costPrice)||0) * (Number(p.stock)||0), 0);
+  $('statStockValue').textContent = fmtMoney(stockValue);
+  $('statStockCount').textContent = `${products.length} products tracked`;
+
+  const openBills = bills.filter(b => isConfirmed(b) && (b.balance||0) > 0.005);
+  const outstanding = openBills.reduce((s,b) => s + (b.balance||0), 0);
+  $('statOutstanding').textContent = fmtMoney(outstanding);
+  $('statOutstandingCount').textContent = `${openBills.length} open bills`;
+
+  const overdueBills = openBills.filter(b => b.dueDate && daysOverdue(b.dueDate) > 0);
+  const overdueAmt = overdueBills.reduce((s,b) => s + (b.balance||0), 0);
+  $('statOverdue').textContent = fmtMoney(overdueAmt);
+  $('statOverdueCount').textContent = `${overdueBills.length} bills overdue`;
+
+  const lowStock = products.filter(p => (Number(p.stock)||0) <= (Number(p.reorderLevel)||0));
+  $('statLowStock').textContent = lowStock.length;
+
+  const pendingCount = bills.filter(b => (b.billStatus||'confirmed') === 'pending').length;
+  const pendingBanner = $('pendingBanner');
+  if (pendingBanner) {
+    pendingBanner.classList.toggle('hidden', pendingCount === 0);
+    if (pendingCount > 0) $('pendingBannerText').textContent = `${pendingCount} bill(s) waiting to be confirmed or cancelled on Daily loading.`;
+  }
+
+  const recent = [...bills].sort((a,b)=> (b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)).slice(0,6);
+  $('dashRecentBills').innerHTML = recent.length ? recent.map(b => `
+    <tr class="border-b border-slate-50 last:border-0">
+      <td class="px-5 py-2.5 font-num text-xs">${b.billNo||''}</td>
+      <td class="py-2.5">${b.shopName||''} ${(b.billStatus==='pending')?'<span class="stamp text-amber2-600 text-[9px] px-1.5 py-0 ml-1">pending</span>':''}${(b.billStatus==='cancelled')?'<span class="stamp text-slate2-400 text-[9px] px-1.5 py-0 ml-1">cancelled</span>':''}</td>
+      <td class="py-2.5 text-xs text-slate2-500">${fmtDate(b.dueDate)}</td>
+      <td class="py-2.5 px-5 text-right font-num">${fmtMoney(b.balance)}</td>
+    </tr>`).join('') : `<tr><td colspan="4" class="text-center py-8 text-slate2-400 text-sm">No bills yet</td></tr>`;
+
+  const buckets = getAgingBuckets();
+  $('agingBuckets').innerHTML = buckets.map(bk => `
+    <div class="flex items-center justify-between text-sm">
+      <span class="text-slate2-500">${bk.label}</span>
+      <span class="font-num font-semibold ${bk.danger ? 'text-brick-700' : 'text-navy-900'}">${fmtMoney(bk.amount)}</span>
+    </div>`).join('');
+}
+
+function isConfirmed(b){ return (b.billStatus||'confirmed') === 'confirmed'; }
+
+function getAgingBuckets(){
+  const open = bills.filter(b => isConfirmed(b) && (b.balance||0) > 0.005 && b.dueDate);
+  const b0 = open.filter(b => { const d = daysOverdue(b.dueDate); return d > 0 && d <= 30; });
+  const b1 = open.filter(b => { const d = daysOverdue(b.dueDate); return d > 30 && d <= 60; });
+  const b2 = open.filter(b => { const d = daysOverdue(b.dueDate); return d > 60 && d <= 90; });
+  const b3 = open.filter(b => daysOverdue(b.dueDate) > 90);
+  const sum = arr => arr.reduce((s,b)=> s + (b.balance||0), 0);
+  return [
+    { label: '0–30 days', amount: sum(b0), danger:false, list:b0 },
+    { label: '31–60 days', amount: sum(b1), danger:false, list:b1 },
+    { label: '61–90 days', amount: sum(b2), danger:true, list:b2 },
+    { label: '90+ days', amount: sum(b3), danger:true, list:b3 },
+  ];
+}
+
+// ================= PRODUCTS =================
+window.openProductModal = (id) => {
+  $('productId').value = '';
+  ['productSku','productUnit','productName','productCost','productPrice','productStock','productReorder'].forEach(f=>$(f).value='');
+  $('productModalTitle').textContent = 'Add product';
+  $('productStock').disabled = false;
+  if (id) {
+    const p = products.find(x=>x.id===id);
+    $('productId').value = id;
+    $('productModalTitle').textContent = 'Edit product';
+    $('productSku').value = p.sku||''; $('productUnit').value = p.unit||'';
+    $('productName').value = p.name||''; $('productCost').value = p.costPrice||0;
+    $('productPrice').value = p.sellingPrice||0; $('productStock').value = p.stock||0;
+    $('productReorder').value = p.reorderLevel||0;
+    $('productStock').disabled = true; // stock is edited via stock movements only
+  }
+  openModalEl('productModal');
+};
+window.saveProduct = async () => {
+  const id = $('productId').value;
+  const data = {
+    sku: $('productSku').value.trim(),
+    unit: $('productUnit').value.trim() || 'pcs',
+    name: $('productName').value.trim(),
+    costPrice: Number($('productCost').value)||0,
+    sellingPrice: Number($('productPrice').value)||0,
+    reorderLevel: Number($('productReorder').value)||0,
+  };
+  if (!data.name) { toast('Product name is required'); return; }
+  if (id) {
+    await updateDoc(doc(db,'products',id), data);
+    toast('Product updated');
+  } else {
+    data.stock = Number($('productStock').value)||0;
+    data.createdAt = serverTimestamp();
+    const ref = await addDoc(colProducts, data);
+    if (data.stock > 0) {
+      await addDoc(colMovements, { productId: ref.id, productName: data.name, type:'in', qty:data.stock, refType:'opening', note:'Opening stock', createdAt: serverTimestamp() });
+    }
+    toast('Product added');
+  }
+  closeModal('productModal');
+};
+window.deleteProduct = (id) => {
+  askConfirm('Delete this product? Stock history will remain but the product will no longer appear in lists.', async () => {
+    await deleteDoc(doc(db,'products',id));
+    toast('Product deleted');
+  });
+};
+$('productSearch').addEventListener('input', renderProducts);
+function renderProducts(){
+  if (activeView !== 'products') return;
+  const q = $('productSearch').value.trim().toLowerCase();
+  const rows = products.filter(p => !q || (p.name||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
+  $('productsEmpty').classList.toggle('hidden', products.length !== 0);
+  $('productsTable').innerHTML = rows.map(p => {
+    const low = (Number(p.stock)||0) <= (Number(p.reorderLevel)||0);
+    return `
+    <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+      <td class="px-5 py-3 font-num text-xs text-slate2-500">${p.sku||'—'}</td>
+      <td class="py-3 font-medium">${p.name}</td>
+      <td class="py-3 text-slate2-500">${p.unit||'pcs'}</td>
+      <td class="py-3 text-right font-num">${fmtMoney(p.costPrice)}</td>
+      <td class="py-3 text-right font-num">${fmtMoney(p.sellingPrice)}</td>
+      <td class="py-3 text-right font-num ${low?'text-brick-600 font-semibold':''}">${p.stock||0} ${low?'<span class=\"stamp text-brick-600 text-[9px] px-1.5 py-0 ml-1\">low</span>':''}</td>
+      <td class="py-3 px-5 text-right whitespace-nowrap">
+        <button onclick="openProductModal('${p.id}')" class="text-xs text-navy-700 hover:underline mr-3">Edit</button>
+        <button onclick="deleteProduct('${p.id}')" class="text-xs text-brick-600 hover:underline">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ================= STOCK MOVEMENTS =================
+window.openStockModal = (type) => {
+  $('stockType').value = type;
+  $('stockModalTitle').textContent = type === 'in' ? 'Stock in — from mother company' : 'Stock out / adjustment';
+  $('stockProduct').innerHTML = products.map(p => `<option value="${p.id}" data-cost="${p.costPrice||0}">${p.name} (on hand: ${p.stock||0})</option>`).join('');
+  $('stockQty').value = ''; $('stockNote').value = ''; $('stockChequeNo').value = ''; $('stockChequeBank').value = ''; $('stockChequeDue').value = '';
+  $('stockDate').value = new Date().toISOString().slice(0,10);
+  $('stockPaymentMethod').value = 'cash';
+  $('stockChequeWrap').classList.add('hidden');
+  const isPurchase = type === 'in';
+  $('stockUnitCostWrap').classList.toggle('hidden', !isPurchase);
+  $('stockPaymentWrap').classList.toggle('hidden', !isPurchase);
+  const firstOpt = $('stockProduct').options[0];
+  $('stockUnitCost').value = firstOpt ? firstOpt.dataset.cost : 0;
+  openModalEl('stockModal');
+};
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'stockProduct') {
+    const opt = e.target.options[e.target.selectedIndex];
+    if (opt) $('stockUnitCost').value = opt.dataset.cost;
+  }
+  if (e.target.id === 'stockPaymentMethod') {
+    $('stockChequeWrap').classList.toggle('hidden', e.target.value !== 'cheque');
+  }
+  if (e.target.id === 'expenseMethod') {
+    $('expenseChequeWrap').classList.toggle('hidden', e.target.value !== 'cheque');
+  }
+});
+window.saveStockMovement = async () => {
+  const type = $('stockType').value;
+  const productId = $('stockProduct').value;
+  const qty = Number($('stockQty').value);
+  const note = $('stockNote').value.trim();
+  const date = $('stockDate').value || new Date().toISOString().slice(0,10);
+  const p = products.find(x=>x.id===productId);
+  if (!p || !qty || qty <= 0) { toast('Enter a valid quantity'); return; }
+  if (type === 'out' && qty > (p.stock||0)) { toast('Not enough stock on hand'); return; }
+  const newStock = type === 'in' ? (p.stock||0) + qty : (p.stock||0) - qty;
+  await updateDoc(doc(db,'products',productId), { stock: newStock });
+
+  const movementData = {
+    productId, productName: p.name, type, qty, date,
+    refType: type === 'in' ? 'purchase' : 'adjustment',
+    note: note || (type==='in' ? 'Received from mother company' : 'Manual adjustment'),
+    createdAt: serverTimestamp()
+  };
+  if (type === 'in') {
+    const unitCost = Number($('stockUnitCost').value) || 0;
+    movementData.unitCost = unitCost;
+    movementData.totalCost = unitCost * qty;
+    movementData.paymentMethod = $('stockPaymentMethod').value;
+    if (movementData.paymentMethod === 'cheque') {
+      movementData.chequeNo = $('stockChequeNo').value.trim();
+      movementData.chequeBank = $('stockChequeBank').value.trim();
+      movementData.chequeDueDate = $('stockChequeDue').value || date;
+      movementData.chequeStatus = 'pending';
+    }
+  }
+  await addDoc(colMovements, movementData);
+  toast(type === 'in' ? 'Stock received' : 'Stock removed');
+  closeModal('stockModal');
+};
+function renderStock(){
+  if (activeView !== 'stock') return;
+  $('stockEmpty').classList.toggle('hidden', movements.length !== 0);
+  $('stockTable').innerHTML = movements.map(m => `
+    <tr class="border-b border-slate-50 last:border-0">
+      <td class="px-5 py-3 text-xs text-slate2-500 font-num">${fmtDate(m.date || (m.createdAt?.toDate ? m.createdAt.toDate() : new Date()))}</td>
+      <td class="py-3">${m.productName}</td>
+      <td class="py-3">
+        <span class="stamp ${m.type==='in' ? 'text-forest-600' : 'text-brick-600'} text-[9px] px-1.5 py-0">${m.type==='in'?'in':'out'}</span>
+        ${m.type==='in' && m.paymentMethod ? `<span class="stamp text-slate2-500 text-[9px] px-1.5 py-0 ml-1">${m.paymentMethod}</span>` : ''}
+      </td>
+      <td class="py-3 text-slate2-500 text-xs">${m.note||m.refType||''} ${m.type==='in' && m.totalCost ? `<span class="font-num">· ${fmtMoney(m.totalCost)}</span>` : ''}</td>
+      <td class="py-3 px-5 text-right font-num ${m.type==='in'?'text-forest-700':'text-brick-700'}">${m.type==='in'?'+':'-'}${m.qty}</td>
+    </tr>`).join('');
+}
+
+// ================= SHOPS =================
+window.openShopModal = (id) => {
+  $('shopId').value = '';
+  ['shopName','shopOwner','shopPhone','shopEmail','shopAddress','shopCreditLimit'].forEach(f=>$(f).value='');
+  $('shopModalTitle').textContent = 'Add retail shop';
+  if (id) {
+    const s = shops.find(x=>x.id===id);
+    $('shopId').value = id;
+    $('shopModalTitle').textContent = 'Edit retail shop';
+    $('shopName').value = s.name||''; $('shopOwner').value = s.ownerName||'';
+    $('shopPhone').value = s.phone||''; $('shopEmail').value = s.email||''; $('shopAddress').value = s.address||'';
+    $('shopCreditLimit').value = s.creditLimit||0;
+  }
+  openModalEl('shopModal');
+};
+window.saveShop = async () => {
+  const id = $('shopId').value;
+  const data = {
+    name: $('shopName').value.trim(),
+    ownerName: $('shopOwner').value.trim(),
+    phone: $('shopPhone').value.trim(),
+    email: $('shopEmail').value.trim(),
+    address: $('shopAddress').value.trim(),
+    creditLimit: Number($('shopCreditLimit').value)||0,
+  };
+  if (!data.name) { toast('Shop name is required'); return; }
+  if (id) { await updateDoc(doc(db,'shops',id), data); toast('Shop updated'); }
+  else { data.createdAt = serverTimestamp(); await addDoc(colShops, data); toast('Shop added'); }
+  closeModal('shopModal');
+};
+window.deleteShop = (id) => {
+  askConfirm('Delete this retail shop?', async () => {
+    await deleteDoc(doc(db,'shops',id));
+    toast('Shop deleted');
+  });
+};
+$('shopSearch').addEventListener('input', renderShops);
+function shopOutstanding(shopId){
+  return bills.filter(b => b.shopId === shopId && isConfirmed(b)).reduce((s,b)=> s + (b.balance||0), 0);
+}
+function renderShops(){
+  if (activeView !== 'shops') return;
+  const q = $('shopSearch').value.trim().toLowerCase();
+  const rows = shops.filter(s => !q || (s.name||'').toLowerCase().includes(q));
+  $('shopsEmpty').classList.toggle('hidden', shops.length !== 0);
+  $('shopsTable').innerHTML = rows.map(s => {
+    const out = shopOutstanding(s.id);
+    const overLimit = s.creditLimit && out > s.creditLimit;
+    return `
+    <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+      <td class="px-5 py-3 font-medium">${s.name}<div class="text-xs text-slate2-400 font-normal">${s.ownerName||''}</div></td>
+      <td class="py-3 font-num text-xs">${s.phone||'—'}<div class="text-slate2-400 font-body">${s.email||''}</div></td>
+      <td class="py-3 text-xs text-slate2-500 max-w-[220px] truncate">${s.address||'—'}</td>
+      <td class="py-3 text-right font-num">${fmtMoney(s.creditLimit)}</td>
+      <td class="py-3 text-right font-num ${overLimit?'text-brick-600 font-semibold':''}">${fmtMoney(out)}</td>
+      <td class="py-3 px-5 text-right whitespace-nowrap">
+        <button onclick="openStatementModal('${s.id}')" class="text-xs text-forest-700 hover:underline mr-3">Statement</button>
+        <button onclick="openShopModal('${s.id}')" class="text-xs text-navy-700 hover:underline mr-3">Edit</button>
+        <button onclick="deleteShop('${s.id}')" class="text-xs text-brick-600 hover:underline">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ================= BILLS =================
+let billItemRows = [];
+
+function nextBillNo(type, dateStr){
+  if (type === 'credit') {
+    const ym = (dateStr || '').slice(0,7);      // "2026-08"
+    const month = Number((dateStr || '').slice(5,7)) || (new Date().getMonth()+1); // 8
+    const seq = bills.filter(b => (b.billType||'credit') === 'credit' && (b.date||'').slice(0,7) === ym).length + 1;
+    return `${month}-${String(seq).padStart(2,'0')}`;
+  }
+  // Daily bills: simple running number, not tied to month
+  const seq = bills.filter(b => b.billType === 'cash').length + 1;
+  return `DB-${String(seq).padStart(4,'0')}`;
+}
+
+function applyBillType(type){
+  $('billTypeCredit').checked = type === 'credit';
+  $('billTypeCash').checked = type === 'cash';
+  $('billDueDateWrap').classList.toggle('hidden', type === 'cash');
+  $('billPaymentWrap').classList.toggle('hidden', type !== 'cash');
+  $('billModalTitle').textContent = type === 'cash' ? 'New daily bill' : 'New credit bill';
+  $('billNoPreview').textContent = nextBillNo(type, $('billDate').value);
+}
+
+window.openBillModal = (type) => {
+  type = type === 'cash' ? 'cash' : 'credit';
+  $('billShop').innerHTML = shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  const today = new Date();
+  const due = new Date(today); due.setDate(due.getDate() + (settings.creditTermDays||30));
+  $('billDate').value = today.toISOString().slice(0,10);
+  $('billDueDate').value = due.toISOString().slice(0,10);
+  $('billDiscount').value = 0;
+  $('billPaymentMethod').value = 'Cash';
+  $('billChequeNo').value = ''; $('billChequeBank').value = ''; $('billChequeDue').value = '';
+  $('billChequeWrap').classList.add('hidden');
+  billItemRows = [];
+  $('billItemsBody').innerHTML = '';
+  addBillItemRow();
+  applyBillType(type);
+  openModalEl('billModal');
+};
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'billDate') {
+    const d = new Date(e.target.value);
+    if (!isNaN(d)) { d.setDate(d.getDate() + (settings.creditTermDays||30)); $('billDueDate').value = d.toISOString().slice(0,10); }
+    const type = $('billTypeCash').checked ? 'cash' : 'credit';
+    $('billNoPreview').textContent = nextBillNo(type, e.target.value);
+  }
+  if (e.target.name === 'billTypeRadio') {
+    applyBillType(e.target.value);
+  }
+  if (e.target.id === 'billPaymentMethod') {
+    $('billChequeWrap').classList.toggle('hidden', e.target.value !== 'Cheque');
+  }
+});
+
+window.addBillItemRow = () => {
+  const rowId = 'row' + Math.random().toString(36).slice(2,9);
+  billItemRows.push(rowId);
+  const optionsHtml = products.map(p => `<option value="${p.id}" data-price="${p.sellingPrice}" data-stock="${p.stock}">${p.name} (stock: ${p.stock||0})</option>`).join('');
+  const tr = document.createElement('tr');
+  tr.id = rowId;
+  tr.className = 'border-b border-slate-50 last:border-0';
+  tr.innerHTML = `
+    <td class="px-3 py-2"><select class="bill-item-product w-full border border-slate-300 rounded px-2 py-1.5 text-sm">${optionsHtml}</select></td>
+    <td class="py-2"><input type="number" min="1" value="1" class="bill-item-qty w-full border border-slate-300 rounded px-2 py-1.5 text-sm font-num" /></td>
+    <td class="py-2"><input type="number" step="0.01" class="bill-item-price w-full border border-slate-300 rounded px-2 py-1.5 text-sm font-num" /></td>
+    <td class="py-2 text-right font-num bill-item-total pr-2">0.00</td>
+    <td class="text-center"><button class="text-brick-600" onclick="removeBillItemRow('${rowId}')">✕</button></td>
+  `;
+  $('billItemsBody').appendChild(tr);
+  const sel = tr.querySelector('.bill-item-product');
+  const priceInput = tr.querySelector('.bill-item-price');
+  const setPrice = () => { const opt = sel.options[sel.selectedIndex]; priceInput.value = opt ? opt.dataset.price : 0; recalcBillTotals(); };
+  sel.addEventListener('change', setPrice);
+  tr.querySelector('.bill-item-qty').addEventListener('input', recalcBillTotals);
+  priceInput.addEventListener('input', recalcBillTotals);
+  setPrice();
+};
+window.removeBillItemRow = (rowId) => {
+  document.getElementById(rowId)?.remove();
+  billItemRows = billItemRows.filter(r => r !== rowId);
+  recalcBillTotals();
+};
+function recalcBillTotals(){
+  let subtotal = 0;
+  document.querySelectorAll('#billItemsBody tr').forEach(tr => {
+    const qty = Number(tr.querySelector('.bill-item-qty').value)||0;
+    const price = Number(tr.querySelector('.bill-item-price').value)||0;
+    const total = qty * price;
+    tr.querySelector('.bill-item-total').textContent = total.toFixed(2);
+    subtotal += total;
+  });
+  const discount = Number($('billDiscount').value)||0;
+  $('billSubtotal').textContent = subtotal.toFixed(2);
+  $('billTotal').textContent = Math.max(subtotal - discount, 0).toFixed(2);
+}
+$('billDiscount').addEventListener('input', recalcBillTotals);
+
+window.saveBill = async () => {
+  const shopId = $('billShop').value;
+  const shop = shops.find(s=>s.id===shopId);
+  if (!shop) { toast('Add a retail shop first'); return; }
+  const rows = [...document.querySelectorAll('#billItemsBody tr')];
+  if (!rows.length) { toast('Add at least one item'); return; }
+
+  const billType = $('billTypeCash').checked ? 'cash' : 'credit';
+  const billDate = $('billDate').value || new Date().toISOString().slice(0,10);
+
+  const items = [];
+  for (const tr of rows) {
+    const sel = tr.querySelector('.bill-item-product');
+    const productId = sel.value;
+    const product = products.find(p=>p.id===productId);
+    const qty = Number(tr.querySelector('.bill-item-qty').value)||0;
+    const price = Number(tr.querySelector('.bill-item-price').value)||0;
+    if (!product || qty <= 0) { toast('Check item quantities'); return; }
+    if (qty > (product.stock||0)) { toast(`Not enough stock for ${product.name}`); return; }
+    items.push({ productId, name: product.name, qty, price, total: qty*price, costPrice: product.costPrice||0 });
+  }
+
+  const subtotal = items.reduce((s,i)=>s+i.total,0);
+  const discount = Number($('billDiscount').value)||0;
+  const total = Math.max(subtotal - discount, 0);
+  const billNo = nextBillNo(billType, billDate);
+  const payMethod = $('billPaymentMethod').value; // 'Cash' or 'Cheque' — only used for daily bills
+  const chequeNo = payMethod === 'Cheque' ? $('billChequeNo').value.trim() : '';
+  const chequeBank = payMethod === 'Cheque' ? $('billChequeBank').value.trim() : '';
+  const chequeDueDate = payMethod === 'Cheque' ? ($('billChequeDue').value || billDate) : '';
+
+  // Bills start as 'pending' — loaded on the vehicle but not yet a finalized sale.
+  // Stock only moves, and cash payments only get recorded, once the bill is Completed (see completeBill()).
+  const billData = {
+    billNo, billType, billStatus: 'pending',
+    shopId, shopName: shop.name, shopPhone: shop.phone||'',
+    date: billDate,
+    dueDate: billType === 'cash' ? billDate : $('billDueDate').value,
+    items, subtotal, discount, total,
+    amountPaid: 0,
+    balance: total,
+    status: 'unpaid',
+    createdAt: serverTimestamp(),
+  };
+  if (billType === 'cash') {
+    billData.paymentMethod = payMethod;
+    billData.chequeNo = chequeNo;
+    if (payMethod === 'Cheque') { billData.chequeBank = chequeBank; billData.chequeDueDate = chequeDueDate; billData.chequeStatus = 'pending'; }
+  }
+  await addDoc(colBills, billData);
+
+  toast((billType === 'cash' ? 'Daily bill' : 'Credit bill') + ' added as pending — confirm it later on Daily loading');
+  closeModal('billModal');
+};
+
+window.completeBill = async (id) => {
+  const b = bills.find(x=>x.id===id);
+  if (!b || (b.billStatus||'confirmed') !== 'pending') return;
+
+  for (const it of (b.items||[])) {
+    const p = products.find(x=>x.id===it.productId);
+    if (!p || it.qty > (p.stock||0)) { toast(`Not enough stock for ${it.name} — adjust or cancel this bill`); return; }
+  }
+
+  for (const it of (b.items||[])) {
+    const p = products.find(x=>x.id===it.productId);
+    await updateDoc(doc(db,'products',it.productId), { stock: (p.stock||0) - it.qty });
+    await addDoc(colMovements, {
+      productId: it.productId, productName: it.name, type:'out', qty: it.qty,
+      refType:'sale', refId: id, note: `Bill ${b.billNo} — ${b.shopName}`,
+      createdAt: serverTimestamp()
+    });
+  }
+
+  const update = { billStatus: 'confirmed' };
+  if (b.billType === 'cash') {
+    update.amountPaid = b.total;
+    update.balance = 0;
+    update.status = 'paid';
+    await addDoc(colPayments, {
+      billId: id, shopId: b.shopId, shopName: b.shopName, billNo: b.billNo,
+      amount: b.total, method: b.paymentMethod || 'Cash',
+      note: b.chequeNo ? `Daily bill — cheque #${b.chequeNo}` : 'Daily bill — paid in full at point of sale',
+      date: b.date, createdAt: serverTimestamp(),
+    });
+  }
+  await updateDoc(doc(db,'bills',id), update);
+  toast('Bill confirmed — stock updated');
+};
+
+window.cancelBillPending = (id) => {
+  askConfirm('Cancel this bill? Stock will not be affected — nothing was ever deducted for a pending bill.', async () => {
+    await updateDoc(doc(db,'bills',id), { billStatus: 'cancelled' });
+    toast('Bill cancelled');
+  });
+};
+
+window.deleteBill = (id) => {
+  askConfirm('Delete this bill? Stock will not be restored automatically.', async () => {
+    await deleteDoc(doc(db,'bills',id));
+    toast('Bill deleted');
+  });
+};
+
+window.viewBill = (id) => {
+  const b = bills.find(x=>x.id===id);
+  if (!b) return;
+  const billPayments = payments.filter(p=>p.billId===id);
+  $('billViewContent').innerHTML = `
+    <div class="flex justify-between mb-4">
+      <div><div class="font-num text-xs text-slate2-500">Bill #</div><div class="font-semibold">${b.billNo} <span class="stamp ${(b.billType||'credit')==='cash'?'text-forest-600':'text-navy-700'} text-[9px] px-1.5 py-0 ml-1">${(b.billType||'credit')==='cash'?'daily':'credit'}</span>${b.billType==='cash' && b.paymentMethod ? ` <span class="stamp text-slate2-500 text-[9px] px-1.5 py-0">${b.paymentMethod}${b.chequeNo?' #'+b.chequeNo:''}</span>` : ''}</div></div>
+      <div class="text-right"><div class="font-num text-xs text-slate2-500">Status</div>${statusStamp(b)}</div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm mb-4">
+      <div><span class="text-slate2-500">Shop:</span> ${b.shopName}</div>
+      <div><span class="text-slate2-500">Phone:</span> ${b.shopPhone||'—'}</div>
+      <div><span class="text-slate2-500">Bill date:</span> ${fmtDate(b.date)}</div>
+      <div><span class="text-slate2-500">Due date:</span> ${(b.billType||'credit')==='cash' ? 'Paid on delivery' : fmtDate(b.dueDate)}</div>
+    </div>
+    <table class="w-full text-sm mb-3 border border-slate-200 rounded overflow-hidden">
+      <thead><tr class="bg-slate-50 text-left text-xs text-slate2-500"><th class="px-3 py-2">Item</th><th class="py-2">Qty</th><th class="py-2 text-right pr-3">Total</th></tr></thead>
+      <tbody>${b.items.map(i=>`<tr class="border-t border-slate-100"><td class="px-3 py-2">${i.name}</td><td class="py-2">${i.qty}</td><td class="py-2 text-right pr-3 font-num">${fmtMoney(i.total)}</td></tr>`).join('')}</tbody>
+    </table>
+    <div class="flex justify-end mb-4">
+      <div class="w-48 text-sm space-y-1">
+        <div class="flex justify-between"><span class="text-slate2-500">Subtotal</span><span class="font-num">${fmtMoney(b.subtotal)}</span></div>
+        <div class="flex justify-between"><span class="text-slate2-500">Discount</span><span class="font-num">${fmtMoney(b.discount)}</span></div>
+        <div class="flex justify-between font-semibold border-t border-slate-200 pt-1"><span>Total</span><span class="font-num">${fmtMoney(b.total)}</span></div>
+        <div class="flex justify-between text-forest-700"><span>Paid</span><span class="font-num">${fmtMoney(b.amountPaid)}</span></div>
+        <div class="flex justify-between text-brick-700 font-semibold"><span>Balance</span><span class="font-num">${fmtMoney(b.balance)}</span></div>
+      </div>
+    </div>
+    <h4 class="font-display font-semibold text-sm mb-2">Payment history</h4>
+    <div class="space-y-1 mb-4">
+      ${billPayments.length ? billPayments.map(p=>`<div class="flex justify-between text-xs text-slate2-600 border-b border-slate-50 py-1"><span>${fmtDate(p.date)} · ${p.method}</span><span class="font-num">${fmtMoney(p.amount)}</span></div>`).join('') : '<div class="text-xs text-slate2-400">No payments yet</div>'}
+    </div>
+    ${!canManage() ? '' : ((b.billStatus||'confirmed') === 'pending' ? `
+      <div class="flex gap-2 mb-2">
+        <button onclick="closeModal('billViewModal'); completeBill('${b.id}')" class="flex-1 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium rounded py-2.5">Complete — deduct stock</button>
+        <button onclick="closeModal('billViewModal'); cancelBillPending('${b.id}')" class="flex-1 bg-brick-600 hover:bg-brick-700 text-white text-sm font-medium rounded py-2.5">Cancel</button>
+      </div>
+    ` : (b.balance > 0.005 ? `
+      <button onclick="closeModal('billViewModal'); openPaymentModal('${b.id}')" class="w-full bg-navy-900 hover:bg-navy-800 text-white text-sm font-medium rounded py-2.5 mb-2">Record payment</button>
+      ${b.dueDate && daysOverdue(b.dueDate) > 0 ? `
+        <div class="flex gap-2">
+          <button onclick="sendOverdueEmail('${b.id}')" class="flex-1 bg-amber2-500 hover:bg-amber2-600 text-navy-950 text-sm font-medium rounded py-2.5">✉ Email reminder</button>
+          <button onclick="sendOverdueWhatsApp('${b.id}')" class="flex-1 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium rounded py-2.5">✆ WhatsApp</button>
+        </div>
+      ` : ''}
+    ` : ''))}
+  `;
+  openModalEl('billViewModal');
+};
+
+function statusStamp(b){
+  const bs = b.billStatus || 'confirmed';
+  if (bs === 'pending') return `<span class="stamp text-amber2-600 dot">pending</span>`;
+  if (bs === 'cancelled') return `<span class="stamp text-slate2-400 dot">cancelled</span>`;
+  const overdue = b.balance > 0.005 && b.dueDate && daysOverdue(b.dueDate) > 0;
+  if (b.status === 'paid') return `<span class="stamp text-forest-600 dot">paid</span>`;
+  if (overdue) return `<span class="stamp text-brick-600 dot">overdue · ${daysOverdue(b.dueDate)}d</span>`;
+  if (b.status === 'partial') return `<span class="stamp text-amber2-600 dot">partial</span>`;
+  return `<span class="stamp text-slate2-500 dot">unpaid</span>`;
+}
+
+$('billSearch').addEventListener('input', renderBills);
+$('billStatusFilter').addEventListener('change', renderBills);
+$('billTypeFilter').addEventListener('change', renderBills);
+$('billConfirmFilter')?.addEventListener('change', renderBills);
+function renderBills(){
+  if (activeView !== 'bills') return;
+  const q = $('billSearch').value.trim().toLowerCase();
+  const filter = $('billStatusFilter').value;
+  const typeFilter = $('billTypeFilter').value;
+  const confirmFilter = $('billConfirmFilter') ? $('billConfirmFilter').value : 'all';
+  let rows = bills.filter(b => !q || (b.billNo||'').toLowerCase().includes(q) || (b.shopName||'').toLowerCase().includes(q));
+  if (typeFilter !== 'all') rows = rows.filter(b => (b.billType||'credit') === typeFilter);
+  if (confirmFilter !== 'all') rows = rows.filter(b => (b.billStatus||'confirmed') === confirmFilter);
+  if (filter === 'overdue') rows = rows.filter(b => b.balance>0.005 && b.dueDate && daysOverdue(b.dueDate)>0);
+  else if (filter !== 'all') rows = rows.filter(b => b.status === filter);
+
+  $('billsEmpty').classList.toggle('hidden', bills.length !== 0);
+  $('billsTable').innerHTML = rows.map(b => {
+    const bs = b.billStatus || 'confirmed';
+    return `
+    <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 ${bs==='cancelled'?'opacity-50':''}">
+      <td class="px-5 py-3 font-num text-xs">${b.billNo}</td>
+      <td class="py-3"><span class="stamp ${(b.billType||'credit')==='cash'?'text-forest-600':'text-navy-700'} text-[9px] px-1.5 py-0">${(b.billType||'credit')==='cash'?'daily':'credit'}</span>${b.billType==='cash' && b.paymentMethod ? ` <span class="stamp text-slate2-500 text-[9px] px-1.5 py-0">${b.paymentMethod}</span>` : ''}</td>
+      <td class="py-3">${b.shopName}</td>
+      <td class="py-3 text-xs text-slate2-500">${fmtDate(b.date)}</td>
+      <td class="py-3 text-xs text-slate2-500">${(b.billType||'credit')==='cash' ? '—' : fmtDate(b.dueDate)}</td>
+      <td class="py-3 text-right font-num">${fmtMoney(b.total)}</td>
+      <td class="py-3 text-right font-num text-forest-700">${fmtMoney(b.amountPaid)}</td>
+      <td class="py-3 text-right font-num font-semibold">${fmtMoney(b.balance)}</td>
+      <td class="py-3">${statusStamp(b)}</td>
+      <td class="py-3 px-5 text-right whitespace-nowrap">
+        <button onclick="viewBill('${b.id}')" class="text-xs text-navy-700 hover:underline mr-3">View</button>
+        ${canManage() ? (bs === 'pending' ? `
+          <button onclick="completeBill('${b.id}')" class="text-xs text-forest-700 hover:underline mr-3">Complete</button>
+          <button onclick="cancelBillPending('${b.id}')" class="text-xs text-brick-600 hover:underline">Cancel</button>
+        ` : `
+          ${(bs==='confirmed' && b.balance>0.005 && b.dueDate && daysOverdue(b.dueDate)>0) ? `<button onclick="sendOverdueEmail('${b.id}')" class="text-xs text-amber2-600 hover:underline mr-3">Email</button><button onclick="sendOverdueWhatsApp('${b.id}')" class="text-xs text-forest-600 hover:underline mr-3">WhatsApp</button>` : ''}
+          <button onclick="deleteBill('${b.id}')" class="text-xs text-brick-600 hover:underline">Delete</button>
+        `) : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ================= PAYMENTS =================
+window.openPaymentModal = (billId) => {
+  const openBills = bills.filter(b => b.balance > 0.005);
+  $('paymentBill').innerHTML = openBills.map(b => `<option value="${b.id}">${b.billNo} — ${b.shopName} (bal ${fmtMoney(b.balance)})</option>`).join('');
+  if (billId) $('paymentBill').value = billId;
+  $('paymentAmount').value = ''; $('paymentNote').value = '';
+  updatePaymentHint();
+  openModalEl('paymentModal');
+};
+$('paymentBill').addEventListener('change', updatePaymentHint);
+function updatePaymentHint(){
+  const b = bills.find(x=>x.id===$('paymentBill').value);
+  $('paymentBalanceHint').textContent = b ? `Outstanding balance: ${fmtMoney(b.balance)}` : '';
+}
+window.savePayment = async () => {
+  const billId = $('paymentBill').value;
+  const b = bills.find(x=>x.id===billId);
+  const amount = Number($('paymentAmount').value);
+  if (!b) { toast('Select a bill'); return; }
+  if (!amount || amount <= 0) { toast('Enter a valid amount'); return; }
+  if (amount > b.balance + 0.005) { toast('Amount exceeds outstanding balance'); return; }
+
+  const newPaid = (b.amountPaid||0) + amount;
+  const newBalance = Math.max(b.total - newPaid, 0);
+  const newStatus = newBalance <= 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : 'unpaid');
+
+  await updateDoc(doc(db,'bills',billId), { amountPaid: newPaid, balance: newBalance, status: newStatus });
+  await addDoc(colPayments, {
+    billId, shopId: b.shopId, shopName: b.shopName, billNo: b.billNo,
+    amount, method: $('paymentMethod').value, note: $('paymentNote').value.trim(),
+    date: new Date().toISOString().slice(0,10), createdAt: serverTimestamp(),
+  });
+  toast('Payment recorded');
+  closeModal('paymentModal');
+};
+function renderPayments(){
+  if (activeView !== 'payments') return;
+  $('paymentsEmpty').classList.toggle('hidden', payments.length !== 0);
+  $('paymentsTable').innerHTML = payments.map(p => `
+    <tr class="border-b border-slate-50 last:border-0">
+      <td class="px-5 py-3 text-xs text-slate2-500 font-num">${fmtDate(p.date)}</td>
+      <td class="py-3 font-num text-xs">${p.billNo}</td>
+      <td class="py-3">${p.shopName}</td>
+      <td class="py-3 text-slate2-500">${p.method}</td>
+      <td class="py-3 px-5 text-right font-num text-forest-700">${fmtMoney(p.amount)}</td>
+    </tr>`).join('');
+}
+
+// ================= CHEQUE REGISTER =================
+// Cheques aren't stored separately — they're picked up from any bill, purchase, or
+// expense that was paid by cheque, each carrying its own chequeStatus field.
+function getAllCheques(){
+  const list = [];
+  bills.forEach(b => {
+    if (b.billType === 'cash' && b.paymentMethod === 'Cheque' && b.chequeNo) {
+      list.push({ source:'bill', id:b.id, direction:'in', chequeNo:b.chequeNo, bank:b.chequeBank||'',
+        party:b.shopName, amount:b.total, dueDate:b.chequeDueDate||b.date, status:b.chequeStatus||'pending' });
+    }
+  });
+  movements.forEach(m => {
+    if (m.type === 'in' && m.paymentMethod === 'cheque' && m.chequeNo) {
+      list.push({ source:'purchase', id:m.id, direction:'out', chequeNo:m.chequeNo, bank:m.chequeBank||'',
+        party: m.productName ? `Purchase — ${m.productName}` : 'Purchase', amount:m.totalCost||0, dueDate:m.chequeDueDate||m.date, status:m.chequeStatus||'pending' });
+    }
+  });
+  expenses.forEach(e => {
+    if (e.paymentMethod === 'cheque' && e.chequeNo) {
+      list.push({ source:'expense', id:e.id, direction:'out', chequeNo:e.chequeNo, bank:e.chequeBank||'',
+        party: e.category||'Expense', amount:e.amount||0, dueDate:e.chequeDueDate||e.date, status:e.chequeStatus||'pending' });
+    }
+  });
+  return list;
+}
+window.updateChequeStatus = async (source, id, status) => {
+  const colMap = { bill: 'bills', purchase: 'stockMovements', expense: 'expenses' };
+  await updateDoc(doc(db, colMap[source], id), { chequeStatus: status });
+  toast('Cheque status updated');
+};
+function updateChequeBadge(){
+  const today = new Date().toISOString().slice(0,10);
+  const n = getAllCheques().filter(c => c.status === 'pending' && c.dueDate && c.dueDate <= today).length;
+  const el = $('chequeBadge');
+  if (!el) return;
+  if (n > 0) { el.textContent = n; el.classList.remove('hidden'); } else { el.classList.add('hidden'); }
+}
+$('chequeFilter')?.addEventListener('change', renderCheques);
+function renderCheques(){
+  if (activeView !== 'cheques') return;
+  const all = getAllCheques();
+  const incomingPending = all.filter(c=>c.direction==='in' && c.status==='pending').reduce((s,c)=>s+c.amount,0);
+  const outgoingPending = all.filter(c=>c.direction==='out' && c.status==='pending').reduce((s,c)=>s+c.amount,0);
+  const cleared = all.filter(c=>c.status==='cleared').reduce((s,c)=>s+c.amount,0);
+  const bounced = all.filter(c=>c.status==='bounced').length;
+  $('chqIncomingPending').textContent = fmtMoney(incomingPending);
+  $('chqOutgoingPending').textContent = fmtMoney(outgoingPending);
+  $('chqCleared').textContent = fmtMoney(cleared);
+  $('chqBounced').textContent = bounced;
+
+  const filter = $('chequeFilter').value;
+  let rows = filter === 'all' ? all : all.filter(c => c.status === filter);
+  rows.sort((a,b) => (a.dueDate||'').localeCompare(b.dueDate||''));
+
+  $('chequeEmpty').classList.toggle('hidden', rows.length !== 0);
+  $('chequeTable').innerHTML = rows.map(c => `
+    <tr class="border-b border-slate-50 last:border-0">
+      <td class="px-5 py-3 font-num text-xs">${c.chequeNo}</td>
+      <td class="py-3 text-xs text-slate2-500">${c.bank||'—'}</td>
+      <td class="py-3"><span class="stamp ${c.direction==='in'?'text-forest-600':'text-brick-600'} text-[9px] px-1.5 py-0">${c.direction==='in'?'in':'out'}</span></td>
+      <td class="py-3">${c.party}</td>
+      <td class="py-3 text-xs text-slate2-500">${fmtDate(c.dueDate)}</td>
+      <td class="py-3 text-right font-num">${fmtMoney(c.amount)}</td>
+      <td class="py-3 px-5 text-right">
+        <select onchange="updateChequeStatus('${c.source}','${c.id}', this.value)" class="border border-slate-300 rounded px-2 py-1 text-xs">
+          <option value="pending" ${c.status==='pending'?'selected':''}>Pending</option>
+          <option value="cleared" ${c.status==='cleared'?'selected':''}>Cleared</option>
+          <option value="bounced" ${c.status==='bounced'?'selected':''}>Bounced</option>
+        </select>
+      </td>
+    </tr>`).join('');
+}
+
+// ================= OVERDUE =================
+$('only30Toggle').addEventListener('change', renderOverdue);
+function renderOverdue(){
+  if (activeView !== 'overdue') return;
+  const buckets = getAgingBuckets();
+  $('ageBucket0').textContent = fmtMoney(buckets[0].amount);
+  $('ageBucket1').textContent = fmtMoney(buckets[1].amount);
+  $('ageBucket2').textContent = fmtMoney(buckets[2].amount);
+  $('ageBucket3').textContent = fmtMoney(buckets[3].amount);
+
+  let rows = bills.filter(b => isConfirmed(b) && b.balance > 0.005 && b.dueDate && daysOverdue(b.dueDate) > 0);
+  if ($('only30Toggle').checked) rows = rows.filter(b => daysOverdue(b.dueDate) >= 30);
+  rows.sort((a,b) => daysOverdue(b.dueDate) - daysOverdue(a.dueDate));
+
+  const totalOverdue = rows.reduce((s,b)=>s+b.balance,0);
+  $('overdueTotalLabel').textContent = rows.length ? `Total overdue shown: ${fmtMoney(totalOverdue)}` : '';
+  $('overdueEmpty').classList.toggle('hidden', rows.length !== 0);
+
+  $('overdueTable').innerHTML = rows.map(b => {
+    const d = daysOverdue(b.dueDate);
+    const shop = shops.find(s=>s.id===b.shopId);
+    const hasEmail = !!(shop && shop.email);
+    const hasPhone = !!(shop && shop.phone);
+    return `
+    <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+      <td class="px-5 py-3 font-num text-xs">${b.billNo}</td>
+      <td class="py-3 font-medium">${b.shopName}</td>
+      <td class="py-3 font-num text-xs text-slate2-500">${b.shopPhone||'—'}</td>
+      <td class="py-3 text-xs text-slate2-500">${fmtDate(b.dueDate)}</td>
+      <td class="py-3 text-right"><span class="stamp ${d>=30?'text-brick-600':'text-amber2-600'} dot">${d}d</span></td>
+      <td class="py-3 text-right font-num font-semibold">${fmtMoney(b.balance)}</td>
+      <td class="py-3 px-5 text-right whitespace-nowrap">
+        <button onclick="viewBill('${b.id}')" class="text-xs text-navy-700 hover:underline mr-3">View</button>
+        <button onclick="openPaymentModal('${b.id}')" class="text-xs text-forest-700 hover:underline mr-3">Record payment</button>
+        <button onclick="sendOverdueEmail('${b.id}')" class="text-xs ${hasEmail ? 'text-amber2-600 hover:underline' : 'text-slate2-300 cursor-not-allowed'} mr-3" title="${hasEmail ? 'Email ' + shop.email : 'No email on file for this shop'}">Email</button>
+        <button onclick="sendOverdueWhatsApp('${b.id}')" class="text-xs ${hasPhone ? 'text-forest-600 hover:underline' : 'text-slate2-300 cursor-not-allowed'}" title="${hasPhone ? 'WhatsApp ' + shop.phone : 'No phone on file for this shop'}">WhatsApp</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+// ---------- Email delivery: EmailJS (real send) with mailto fallback ----------
+function emailjsConfigured(){
+  return !!(settings.emailjsServiceId && settings.emailjsTemplateId && settings.emailjsPublicKey);
+}
+function truncateForMailto(body, limit){
+  limit = limit || 1500;
+  if (encodeURIComponent(body).length <= limit) return body;
+  const lines = body.split('\n');
+  let out = '';
+  for (const line of lines) {
+    const candidate = out + line + '\n';
+    if (encodeURIComponent(candidate).length > limit) break;
+    out = candidate;
+  }
+  return out + '\n…(message shortened — open the app for full details)';
+}
+async function deliverEmail(toEmail, subject, body){
+  if (emailjsConfigured()) {
+    try {
+      await emailjs.send(settings.emailjsServiceId, settings.emailjsTemplateId,
+        { to_email: toEmail, subject, message: body },
+        { publicKey: settings.emailjsPublicKey }
+      );
+      toast(`Email sent to ${toEmail}`);
+      return;
+    } catch (err) {
+      console.error('EmailJS send failed:', err);
+      toast('Auto-send failed — opening your email app instead');
+    }
+  }
+  window.location.href = `mailto:${toEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(truncateForMailto(body))}`;
+  toast('Opened your email app — press Send there to deliver it');
+}
+async function copyToClipboard(text){
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Copied — paste it into WhatsApp, email, or SMS');
+  } catch (err) {
+    toast('Could not copy — select and copy the text manually');
+  }
+}
+
+// ---------- WhatsApp: converts local Sri Lankan numbers (0XXXXXXXXX) to intl format ----------
+function waPhoneDigits(phone){
+  let digits = (phone || '').replace(/\D/g, '');
+  if (digits.length === 10 && digits.startsWith('0')) digits = '94' + digits.slice(1);
+  return digits;
+}
+function openWhatsApp(phone, text){
+  const digits = waPhoneDigits(phone);
+  if (!digits) { toast('No phone number on file'); return; }
+  window.open(`https://wa.me/${digits}?text=${encodeURIComponent(text)}`, '_blank');
+}
+
+function buildOverdueBillEmail(b, shop){
+  const d = daysOverdue(b.dueDate);
+  const subject = `Payment reminder — Bill ${b.billNo} (${d} days overdue)`;
+  const body =
+`Dear ${shop.ownerName || shop.name},
+
+This is a reminder that Bill ${b.billNo} dated ${fmtDate(b.date)} is now ${d} days overdue.
+
+Bill total: ${fmtMoney(b.total)}
+Amount paid: ${fmtMoney(b.amountPaid)}
+Outstanding balance: ${fmtMoney(b.balance)}
+Due date: ${fmtDate(b.dueDate)}
+
+Kindly arrange payment at your earliest convenience. Please contact us if you have any questions.
+
+Thank you,
+${settings.companyName}`;
+  return { subject, body };
+}
+window.sendOverdueEmail = (billId) => {
+  const b = bills.find(x=>x.id===billId);
+  if (!b) return;
+  const shop = shops.find(s=>s.id===b.shopId);
+  if (!shop || !shop.email) { toast('Add an email for this shop first (Retail shops → Edit)'); return; }
+  const { subject, body } = buildOverdueBillEmail(b, shop);
+  deliverEmail(shop.email, subject, body);
+};
+window.sendOverdueWhatsApp = (billId) => {
+  const b = bills.find(x=>x.id===billId);
+  if (!b) return;
+  const shop = shops.find(s=>s.id===b.shopId);
+  if (!shop || !shop.phone) { toast('Add a phone number for this shop first (Retail shops → Edit)'); return; }
+  const { body } = buildOverdueBillEmail(b, shop);
+  openWhatsApp(shop.phone, body);
+};
+
+function buildOverdueListEmail(){
+  let rows = bills.filter(b => isConfirmed(b) && b.balance > 0.005 && b.dueDate && daysOverdue(b.dueDate) > 0);
+  if ($('only30Toggle').checked) rows = rows.filter(b => daysOverdue(b.dueDate) >= 30);
+  rows.sort((a,b) => daysOverdue(b.dueDate) - daysOverdue(a.dueDate));
+  if (!rows.length) return null;
+
+  const totalOverdue = rows.reduce((s,b)=>s+b.balance,0);
+  const buckets = getAgingBuckets();
+
+  let body = `Overdue credit bills — ${fmtDate(new Date())}\n${settings.companyName}\n\n`;
+  body += `Total overdue: ${fmtMoney(totalOverdue)} across ${rows.length} bill(s)\n`;
+  body += `0-30d: ${fmtMoney(buckets[0].amount)}   31-60d: ${fmtMoney(buckets[1].amount)}   61-90d: ${fmtMoney(buckets[2].amount)}   90+d: ${fmtMoney(buckets[3].amount)}\n\n`;
+  body += `Bill #      Shop                       Days    Balance\n`;
+  body += `--------------------------------------------------------\n`;
+  body += rows.map(b => {
+    const d = daysOverdue(b.dueDate);
+    return `${(b.billNo||'').padEnd(10)}  ${(b.shopName||'').slice(0,24).padEnd(24)}  ${(d+'d').padEnd(6)}  ${fmtMoney(b.balance)}`;
+  }).join('\n');
+
+  const subject = `Overdue bills summary — ${rows.length} bill(s), ${fmtMoney(totalOverdue)} total`;
+  return { subject, body, count: rows.length };
+}
+window.sendOverdueListToBoss = () => {
+  const bossEmail = (settings.bossEmail || '').trim();
+  if (!bossEmail) { toast("Add your boss's email in Settings first"); return; }
+  const result = buildOverdueListEmail();
+  if (!result) { toast('No overdue bills to send right now'); return; }
+  deliverEmail(bossEmail, result.subject, result.body);
+};
+window.copyOverdueListToBoss = () => {
+  const result = buildOverdueListEmail();
+  if (!result) { toast('No overdue bills to copy right now'); return; }
+  copyToClipboard(`${result.subject}\n\n${result.body}`);
+};
+window.sendOverdueListWhatsApp = () => {
+  const bossPhone = (settings.bossPhone || '').trim();
+  if (!bossPhone) { toast("Add your boss's WhatsApp number in Settings first"); return; }
+  const result = buildOverdueListEmail();
+  if (!result) { toast('No overdue bills to send right now'); return; }
+  openWhatsApp(bossPhone, `${result.subject}\n\n${result.body}`);
+};
+
+function updateOverdueBadge(){
+  const n = bills.filter(b => isConfirmed(b) && b.balance > 0.005 && b.dueDate && daysOverdue(b.dueDate) > 0).length;
+  const el = $('overdueBadge');
+  if (n > 0) { el.textContent = n; el.classList.remove('hidden'); } else { el.classList.add('hidden'); }
+}
+
+// ================= EXPENSES =================
+window.openExpenseModal = (id) => {
+  $('expenseId').value = '';
+  $('expenseModalTitle').textContent = 'Add expense';
+  $('expenseDate').value = new Date().toISOString().slice(0,10);
+  $('expenseCategory').value = 'Rent';
+  $('expenseAmount').value = '';
+  $('expenseMethod').value = 'cash';
+  $('expenseChequeNo').value = ''; $('expenseChequeBank').value = ''; $('expenseChequeDue').value = '';
+  $('expenseChequeWrap').classList.add('hidden');
+  $('expenseNote').value = '';
+  if (id) {
+    const e = expenses.find(x=>x.id===id);
+    $('expenseId').value = id;
+    $('expenseModalTitle').textContent = 'Edit expense';
+    $('expenseDate').value = e.date||''; $('expenseCategory').value = e.category||'Other';
+    $('expenseAmount').value = e.amount||0; $('expenseMethod').value = e.paymentMethod||'cash';
+    $('expenseChequeNo').value = e.chequeNo||''; $('expenseChequeBank').value = e.chequeBank||''; $('expenseChequeDue').value = e.chequeDueDate||'';
+    $('expenseNote').value = e.note||'';
+    $('expenseChequeWrap').classList.toggle('hidden', e.paymentMethod !== 'cheque');
+  }
+  openModalEl('expenseModal');
+};
+window.saveExpense = async () => {
+  const id = $('expenseId').value;
+  const isCheque = $('expenseMethod').value === 'cheque';
+  const data = {
+    date: $('expenseDate').value || new Date().toISOString().slice(0,10),
+    category: $('expenseCategory').value,
+    amount: Number($('expenseAmount').value)||0,
+    paymentMethod: $('expenseMethod').value,
+    chequeNo: isCheque ? $('expenseChequeNo').value.trim() : '',
+    chequeBank: isCheque ? $('expenseChequeBank').value.trim() : '',
+    chequeDueDate: isCheque ? ($('expenseChequeDue').value || $('expenseDate').value) : '',
+    note: $('expenseNote').value.trim(),
+  };
+  if (isCheque && !id) data.chequeStatus = 'pending';
+  if (!data.amount || data.amount <= 0) { toast('Enter a valid amount'); return; }
+  if (id) { await updateDoc(doc(db,'expenses',id), data); toast('Expense updated'); }
+  else { data.createdAt = serverTimestamp(); await addDoc(colExpenses, data); toast('Expense added'); }
+  closeModal('expenseModal');
+};
+window.deleteExpense = (id) => {
+  askConfirm('Delete this expense?', async () => {
+    await deleteDoc(doc(db,'expenses',id));
+    toast('Expense deleted');
+  });
+};
+$('expenseMonthFilter')?.addEventListener('change', renderExpenses);
+function renderExpenses(){
+  if (activeView !== 'expenses') return;
+  const month = $('expenseMonthFilter').value || currentMonthStr();
+  const rows = expenses.filter(e => inMonth(e.date, month));
+  $('expensesEmpty').classList.toggle('hidden', rows.length !== 0);
+  $('expensesTable').innerHTML = rows.map(e => `
+    <tr class="border-b border-slate-50 last:border-0">
+      <td class="px-5 py-3 text-xs text-slate2-500 font-num">${fmtDate(e.date)}</td>
+      <td class="py-3">${e.category}</td>
+      <td class="py-3"><span class="stamp text-slate2-500 text-[9px] px-1.5 py-0">${e.paymentMethod}</span></td>
+      <td class="py-3 text-xs text-slate2-500">${e.note||''}</td>
+      <td class="py-3 text-right font-num">${fmtMoney(e.amount)}</td>
+      <td class="py-3 px-5 text-right whitespace-nowrap">
+        <button onclick="openExpenseModal('${e.id}')" class="text-xs text-navy-700 hover:underline mr-3">Edit</button>
+        <button onclick="deleteExpense('${e.id}')" class="text-xs text-brick-600 hover:underline">Delete</button>
+      </td>
+    </tr>`).join('');
+  $('expenseMonthTotal').textContent = fmtMoney(rows.reduce((s,e)=>s+e.amount,0));
+}
+
+// ================= MONTHLY REPORTS =================
+$('reportMonth')?.addEventListener('change', renderReports);
+function renderReports(){
+  if (activeView !== 'reports') return;
+  const month = $('reportMonth').value || currentMonthStr();
+
+  const monthBills = bills.filter(b => isConfirmed(b) && inMonth(b.date, month));
+  const salesTotal = monthBills.reduce((s,b)=>s+(b.total||0),0);
+  const cogs = monthBills.reduce((s,b)=> s + (b.items||[]).reduce((si,i)=> si + (i.costPrice||0)*i.qty, 0), 0);
+  const grossProfit = salesTotal - cogs;
+
+  const monthExpenses = expenses.filter(e => inMonth(e.date, month));
+  const expenseTotal = monthExpenses.reduce((s,e)=>s+e.amount,0);
+  const expenseCash = monthExpenses.filter(e=>e.paymentMethod==='cash').reduce((s,e)=>s+e.amount,0);
+  const expenseCheque = monthExpenses.filter(e=>e.paymentMethod==='cheque').reduce((s,e)=>s+e.amount,0);
+
+  const netProfit = grossProfit - expenseTotal;
+
+  const monthPurchases = movements.filter(m => m.type==='in' && inMonth(m.date, month));
+  const purchaseTotal = monthPurchases.reduce((s,m)=>s+(m.totalCost||0),0);
+  const purchaseCash = monthPurchases.filter(m=>m.paymentMethod==='cash').reduce((s,m)=>s+(m.totalCost||0),0);
+  const purchaseCheque = monthPurchases.filter(m=>m.paymentMethod==='cheque').reduce((s,m)=>s+(m.totalCost||0),0);
+  const purchaseCredit = monthPurchases.filter(m=>m.paymentMethod==='credit').reduce((s,m)=>s+(m.totalCost||0),0);
+
+  const monthPayments = payments.filter(p => inMonth(p.date, month));
+  const collections = monthPayments.reduce((s,p)=>s+p.amount,0);
+  const collectionsCash = monthPayments.filter(p=>p.method==='Cash').reduce((s,p)=>s+p.amount,0);
+  const collectionsCheque = monthPayments.filter(p=>p.method==='Cheque').reduce((s,p)=>s+p.amount,0);
+  const outstandingAll = bills.filter(isConfirmed).reduce((s,b)=>s+(b.balance||0),0);
+
+  $('repSales').textContent = fmtMoney(salesTotal);
+  $('repCogs').textContent = fmtMoney(cogs);
+  $('repGrossProfit').textContent = fmtMoney(grossProfit);
+  $('repNetProfit').textContent = fmtMoney(netProfit);
+  $('repPurchaseTotal').textContent = fmtMoney(purchaseTotal);
+  $('repPurchaseCash').textContent = fmtMoney(purchaseCash);
+  $('repPurchaseCheque').textContent = fmtMoney(purchaseCheque);
+  $('repPurchaseCredit').textContent = fmtMoney(purchaseCredit);
+  $('repExpenseTotal').textContent = fmtMoney(expenseTotal);
+  $('repExpenseCash').textContent = fmtMoney(expenseCash);
+  $('repExpenseCheque').textContent = fmtMoney(expenseCheque);
+  $('repCollections').textContent = fmtMoney(collections);
+  $('repCollectionsCash').textContent = fmtMoney(collectionsCash);
+  $('repCollectionsCheque').textContent = fmtMoney(collectionsCheque);
+  $('repOutstandingAll').textContent = fmtMoney(outstandingAll);
+
+  $('repShopTable').innerHTML = shops.map(s => {
+    const billedThisMonth = bills.filter(b=>b.shopId===s.id && isConfirmed(b) && inMonth(b.date, month)).reduce((sum,b)=>sum+(b.total||0),0);
+    const collectedThisMonth = payments.filter(p=>p.shopId===s.id && inMonth(p.date, month)).reduce((sum,p)=>sum+p.amount,0);
+    const outstandingNow = shopOutstanding(s.id);
+    return `<tr class="border-b border-slate-50 last:border-0">
+      <td class="px-5 py-3 font-medium">${s.name}</td>
+      <td class="py-3 text-right font-num">${fmtMoney(billedThisMonth)}</td>
+      <td class="py-3 text-right font-num text-forest-700">${fmtMoney(collectedThisMonth)}</td>
+      <td class="py-3 px-5 text-right font-num ${outstandingNow>0?'font-semibold text-brick-700':''}">${fmtMoney(outstandingNow)}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="4" class="text-center py-8 text-slate2-400 text-sm">No shops yet</td></tr>`;
+
+  renderSalesChart(monthBills, month);
+  renderTopLists(monthBills);
+}
+
+let salesChartInstance = null;
+function renderSalesChart(monthBills, month){
+  const canvas = document.getElementById('salesTrendChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  const daysInMonth = new Date(Number(month.slice(0,4)), Number(month.slice(5,7)), 0).getDate();
+  const dailyTotals = new Array(daysInMonth).fill(0);
+  monthBills.forEach(b => {
+    const day = Number((b.date||'').slice(8,10));
+    if (day >= 1 && day <= daysInMonth) dailyTotals[day-1] += (b.total||0);
+  });
+  const labels = dailyTotals.map((_,i) => String(i+1));
+  if (salesChartInstance) salesChartInstance.destroy();
+  salesChartInstance = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Sales', data: dailyTotals, backgroundColor: '#16233C', borderRadius: 3, maxBarThickness: 18 }] },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => fmtMoney(ctx.parsed.y) } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: (v) => fmtMoney(v) } } }
+    }
+  });
+}
+
+function renderTopLists(monthBills){
+  const prodAgg = {};
+  monthBills.forEach(b => (b.items||[]).forEach(i => {
+    if (!prodAgg[i.productId]) prodAgg[i.productId] = { name: i.name, revenue: 0, qty: 0 };
+    prodAgg[i.productId].revenue += i.total;
+    prodAgg[i.productId].qty += i.qty;
+  }));
+  const topProducts = Object.values(prodAgg).sort((a,b) => b.revenue - a.revenue).slice(0,5);
+  const maxProdRev = Math.max(1, ...topProducts.map(p => p.revenue));
+  $('topProductsList').innerHTML = topProducts.length ? topProducts.map(p => `
+    <div>
+      <div class="flex justify-between text-sm mb-1"><span class="font-medium">${p.name}</span><span class="font-num text-slate2-500">${fmtMoney(p.revenue)}</span></div>
+      <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-navy-800 rounded-full" style="width:${(p.revenue/maxProdRev*100).toFixed(0)}%"></div></div>
+    </div>`).join('') : `<div class="text-sm text-slate2-400 text-center py-6">No sales yet this month</div>`;
+
+  const shopAgg = {};
+  monthBills.forEach(b => {
+    if (!shopAgg[b.shopId]) shopAgg[b.shopId] = { name: b.shopName, revenue: 0 };
+    shopAgg[b.shopId].revenue += b.total || 0;
+  });
+  const topShops = Object.values(shopAgg).sort((a,b) => b.revenue - a.revenue).slice(0,5);
+  const maxShopRev = Math.max(1, ...topShops.map(s => s.revenue));
+  $('topShopsList').innerHTML = topShops.length ? topShops.map(s => `
+    <div>
+      <div class="flex justify-between text-sm mb-1"><span class="font-medium">${s.name}</span><span class="font-num text-slate2-500">${fmtMoney(s.revenue)}</span></div>
+      <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-forest-600 rounded-full" style="width:${(s.revenue/maxShopRev*100).toFixed(0)}%"></div></div>
+    </div>`).join('') : `<div class="text-sm text-slate2-400 text-center py-6">No sales yet this month</div>`;
+}
+
+// ================= SHOP STATEMENT =================
+window.openStatementModal = (shopId) => {
+  const s = shops.find(x=>x.id===shopId);
+  if (!s) return;
+  $('statementShopId').value = shopId;
+  $('statementShopName').textContent = s.name;
+  $('statementMonth').value = currentMonthStr();
+  renderStatement();
+  openModalEl('statementModal');
+};
+$('statementMonth').addEventListener('change', renderStatement);
+function renderStatement(){
+  const shopId = $('statementShopId').value;
+  const month = $('statementMonth').value || currentMonthStr();
+  if (!shopId) return;
+  const monthStart = month + '-01';
+
+  const shopBills = bills.filter(b=>b.shopId===shopId && isConfirmed(b));
+  const shopPayments = payments.filter(p=>p.shopId===shopId);
+
+  const openingBilled = shopBills.filter(b=>b.date < monthStart).reduce((s,b)=>s+(b.total||0),0);
+  const openingPaid = shopPayments.filter(p=>p.date < monthStart).reduce((s,p)=>s+p.amount,0);
+  const openingBalance = openingBilled - openingPaid;
+
+  const entries = [
+    ...shopBills.filter(b=>inMonth(b.date,month)).map(b=>({ date:b.date, type:'Bill', ref:b.billNo, debit:b.total, credit:0 })),
+    ...shopPayments.filter(p=>inMonth(p.date,month)).map(p=>({ date:p.date, type:'Payment', ref:p.method, debit:0, credit:p.amount })),
+  ].sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+
+  let running = openingBalance;
+  const rowsHtml = entries.map(e => {
+    running += e.debit - e.credit;
+    return `<tr class="border-b border-slate-50 last:border-0 text-sm">
+      <td class="py-2 text-xs text-slate2-500 font-num">${fmtDate(e.date)}</td>
+      <td class="py-2">${e.type}</td>
+      <td class="py-2 text-xs text-slate2-500">${e.ref||''}</td>
+      <td class="py-2 text-right font-num ${e.debit?'':'text-slate2-300'}">${e.debit?fmtMoney(e.debit):'—'}</td>
+      <td class="py-2 text-right font-num ${e.credit?'text-forest-700':'text-slate2-300'}">${e.credit?fmtMoney(e.credit):'—'}</td>
+      <td class="py-2 text-right font-num font-semibold">${fmtMoney(running)}</td>
+    </tr>`;
+  }).join('');
+
+  $('statementContent').innerHTML = `
+    <div class="flex justify-between items-center bg-slate-50 border border-slate-200 rounded px-4 py-2.5 mb-3 text-sm">
+      <span class="text-slate2-500">Opening balance (before ${month})</span>
+      <span class="font-num font-semibold">${fmtMoney(openingBalance)}</span>
+    </div>
+    <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead><tr class="text-left text-[10px] text-slate2-400 border-b border-slate-200">
+        <th class="py-2 font-medium">Date</th><th class="py-2 font-medium">Type</th><th class="py-2 font-medium">Ref</th>
+        <th class="py-2 font-medium text-right">Billed</th><th class="py-2 font-medium text-right">Paid</th><th class="py-2 font-medium text-right">Balance</th>
+      </tr></thead>
+      <tbody>${rowsHtml || `<tr><td colspan="6" class="text-center py-8 text-slate2-400 text-sm">No activity this month</td></tr>`}</tbody>
+    </table>
+    </div>
+    <div class="flex justify-between items-center bg-navy-900 rounded px-4 py-2.5 mt-3 text-sm">
+      <span class="text-slate-300">Closing balance</span>
+      <span class="font-num font-semibold text-white">${fmtMoney(running)}</span>
+    </div>
+  `;
+}
+
+// ================= VEHICLE DAILY SALES =================
+// Per vehicle, per day:  Sales = Open (previous closing) + Re.Ld (today's loading) - Close (evening count)
+// Flow: driver enters loading -> submits -> admin approves (main stock reduced)
+//       driver enters evening balance -> submits -> admin approves (sales locked, becomes next day's opening)
+const VEHICLES = { V1: 'Vehicle 1', V2: 'Vehicle 2' };
+let vehCurrent = 'V1';
+const vehDraft = {};
+const vnum = x => { const n = Number(x); return isFinite(n) && n > 0 ? Math.floor(n) : 0; };
+const vehKey = (date, v) => `${date}_${v}`;
+const vehGetDate = () => ($('vehDate') && $('vehDate').value) || new Date().toISOString().slice(0, 10);
+if ($('vehDate')) $('vehDate').value = new Date().toISOString().slice(0, 10);
+$('vehDate')?.addEventListener('change', () => renderVehicles(true));
+$('vehSearch')?.addEventListener('input', () => renderVehicles(true));
+
+function vehOpening(date, v) {
+  const prevAll = vehicleLogs.filter(l => l.vehicle === v && l.date < date).sort((a, b) => b.date.localeCompare(a.date));
+  const closed = prevAll.find(l => l.closeStatus === 'submitted' || l.closeStatus === 'approved');
+  const later = prevAll.filter(l => (!closed || l.date > closed.date) && l.loadStatus && l.loadStatus !== 'draft');
+  return {
+    map: closed ? (closed.close || {}) : {},
+    from: closed ? closed.date : null,
+    approved: closed ? closed.closeStatus === 'approved' : false,
+    missing: later.map(l => l.date).sort(),
+  };
+}
+
+function vehState(date, v) {
+  const key = vehKey(date, v);
+  const log = vehicleLogs.find(l => l.id === key) || {};
+  let d = vehDraft[key];
+  if (!d || (!d.dirty && d.rev !== (log.rev || 0))) {
+    d = vehDraft[key] = { load: { ...(log.load || {}) }, close: { ...(log.close || {}) }, driverName: log.driverName || '', dirty: false, rev: log.rev || 0 };
+  }
+  return { key, date, v, log, d, opening: vehOpening(date, v) };
+}
+
+function vehFlags(st) {
+  const ls = st.log.loadStatus || 'draft';
+  const cs = st.log.closeStatus || 'draft';
+  return {
+    ls, cs,
+    loadEd: ls === 'draft' || (ls === 'submitted' && canManage()),
+    closeEd: ls !== 'draft' && (cs === 'draft' || (cs === 'submitted' && canManage())),
+  };
+}
+
+function vehCalc(st) {
+  const approved = st.log.closeStatus === 'approved';
+  const closeEntered = approved || st.log.closeStatus === 'submitted' || Object.keys(st.d.close).length > 0;
+  const rows = [];
+  const tot = { open: 0, load: 0, close: 0, sales: 0, value: 0 };
+  products.forEach(p => {
+    const o = vnum(st.opening.map[p.id]);
+    const l = vnum(st.d.load[p.id]);
+    const c = vnum(st.d.close[p.id]);
+    const s = closeEntered ? (o + l - c) : 0;
+    const price = approved && st.log.priceSnap && st.log.priceSnap[p.id] != null ? Number(st.log.priceSnap[p.id]) : (Number(p.sellingPrice) || 0);
+    const val = s * price;
+    rows.push({ p, o, l, c, s, price, val });
+    tot.open += o; tot.load += l; tot.close += c; tot.sales += s; tot.value += val;
+  });
+  rows.sort((a, b) => (a.p.name || '').localeCompare(b.p.name || ''));
+  return { rows, tot, closeEntered, approved };
+}
+
+function vehChip(label, status) {
+  const cls = status === 'approved' ? 'text-forest-600' : status === 'submitted' ? 'text-amber2-600' : 'text-slate2-500';
+  return `<span class="stamp ${cls} text-[9px] px-1.5 py-0" style="transform:none">${label}: ${status}</span>`;
+}
+
+window.vehSetTab = (v) => { vehCurrent = v; renderVehicles(true); };
+
+function updateVehBadge() {
+  const el = $('vehBadge'); if (!el) return;
+  const n = vehicleLogs.filter(l => l.loadStatus === 'submitted' || l.closeStatus === 'submitted').length;
+  if (canManage() && n > 0) { el.textContent = n; el.classList.remove('hidden'); } else { el.classList.add('hidden'); }
+}
+
+function renderVehicles(force) {
+  updateVehBadge();
+  if (activeView !== 'vehicles') return;
+  const ae = document.activeElement;
+  if (!force && ae && ae.tagName === 'INPUT' && ae.closest && ae.closest('#vehTableWrap')) return; // don't wipe what is being typed
+
+  const date = vehGetDate();
+  const st = vehState(date, vehCurrent);
+  const fl = vehFlags(st);
+  const calc = vehCalc(st);
+
+  // tabs
+  ['V1', 'V2'].forEach(v => {
+    const b = $('vehTab' + v);
+    b.className = 'px-4 py-2 font-medium ' + (v === 'V2' ? 'border-l border-slate-300 ' : '') + (v === vehCurrent ? 'bg-navy-900 text-white' : 'bg-white text-navy-900');
+  });
+
+  // summary cards (both vehicles + combined)
+  let combined = 0;
+  const cards = ['V1', 'V2'].map(v => {
+    const s = vehState(date, v), f = vehFlags(s), c = vehCalc(s);
+    combined += c.closeEntered ? c.tot.value : 0;
+    return `
+      <button onclick="vehSetTab('${v}')" class="text-left bg-white border ${v === vehCurrent ? 'border-navy-900 ring-1 ring-navy-900' : 'border-slate-200'} rounded-lg p-4">
+        <div class="flex items-center justify-between">
+          <span class="font-display font-semibold text-sm">${VEHICLES[v]}</span>
+          <span class="text-[10px] text-slate2-400 font-num">${s.d.driverName || s.log.driverName || '—'}</span>
+        </div>
+        <div class="flex flex-wrap gap-1.5 mt-2">${vehChip('Loading', f.ls)}${vehChip('Closing', f.cs)}</div>
+        <div class="grid grid-cols-2 gap-2 mt-3 text-xs">
+          <div><div class="text-slate2-400">Loaded</div><div class="font-num font-semibold">${c.tot.load}</div></div>
+          <div><div class="text-slate2-400">Sold (units)</div><div class="font-num font-semibold">${c.closeEntered ? c.tot.sales : '—'}</div></div>
+        </div>
+        <div class="mt-2 text-sm font-num font-semibold">${c.closeEntered ? fmtMoney(c.tot.value) : '—'}</div>
+      </button>`;
+  }).join('');
+  $('vehSummary').innerHTML = cards + `
+      <div class="bg-navy-900 rounded-lg p-4 text-white">
+        <div class="text-[10px] font-num uppercase text-slate-300">Both vehicles — gross sale</div>
+        <div class="font-display font-bold text-2xl mt-2">${fmtMoney(combined)}</div>
+        <div class="text-xs text-slate-300 mt-1">${fmtDate(date)}</div>
+      </div>`;
+
+  // warnings about opening balance
+  const op = st.opening, warns = [];
+  if (!op.from) warns.push(['info', `No earlier closing balance found for ${VEHICLES[vehCurrent]} — opening balance is 0 (treated as first day).`]);
+  else warns.push([op.approved ? 'info' : 'warn', `Opening balance comes from the closing count of ${fmtDate(op.from)}${op.approved ? '.' : ' — that closing is not approved yet.'}`]);
+  if (op.missing.length) warns.push(['warn', `Closing count missing for ${VEHICLES[vehCurrent]} on: ${op.missing.map(d => fmtDate(d)).join(', ')}. Today's opening balance and sales may be wrong until that is entered.`]);
+  $('vehWarn').innerHTML = warns.map(([t, m]) => `<div class="text-xs rounded px-3 py-2 border ${t === 'warn' ? 'bg-amber2-100 border-amber2-500/30 text-amber2-600' : 'bg-slate-50 border-slate-200 text-slate2-500'}">${m}</div>`).join('');
+
+  // header
+  $('vehTitle').textContent = `${VEHICLES[vehCurrent]} — ${fmtDate(date)}`;
+  $('vehStatusChips').innerHTML = vehChip('Loading', fl.ls) + vehChip('Closing', fl.cs);
+  const drv = $('vehDriver');
+  if (document.activeElement !== drv) drv.value = st.d.driverName || '';
+  drv.disabled = !(fl.loadEd || fl.closeEd);
+
+  // action buttons
+  const btn = (txt, fn, cls) => `<button onclick="${fn}" class="text-xs font-medium rounded px-3 py-2 ${cls}">${txt}</button>`;
+  const navy = 'bg-navy-900 hover:bg-navy-800 text-white', green = 'bg-forest-600 hover:bg-forest-700 text-white';
+  const line = 'border border-slate-300 text-navy-900 hover:bg-white', red = 'border border-brick-600 text-brick-700 hover:bg-brick-100';
+  const A = [];
+  if (fl.loadEd || fl.closeEd) A.push(btn('Save draft', 'saveVehDraft()', line));
+  if (fl.ls === 'draft') A.push(btn('Submit loading', 'submitVehLoad()', navy));
+  if (fl.ls === 'submitted' && canManage()) {
+    A.push(btn('✓ Approve loading (reduce main stock)', 'approveVehLoad()', green));
+    A.push(btn('Send back to driver', "sendBackVeh('load')", red));
+  }
+  if (fl.ls === 'approved' && canManage()) A.push(btn('Reopen loading (restore stock)', "reopenVeh('load')", red));
+  if (fl.ls !== 'draft' && fl.cs === 'draft') A.push(btn('Submit evening balance', 'submitVehClose()', navy));
+  if (fl.cs === 'submitted' && canManage()) {
+    A.push(btn('✓ Approve closing', 'approveVehClose()', green));
+    A.push(btn('Send back to driver', "sendBackVeh('close')", red));
+  }
+  if (fl.cs === 'approved' && canManage()) A.push(btn('Reopen closing', "reopenVeh('close')", red));
+  let note = '';
+  if (fl.ls === 'submitted' && !canManage()) note = 'Loading submitted — waiting for admin approval.';
+  else if (fl.cs === 'submitted' && !canManage()) note = 'Evening balance submitted — waiting for admin approval.';
+  else if (fl.ls === 'approved' && fl.cs === 'approved') note = 'This day is approved and locked.';
+  if (note) A.push(`<span class="text-xs text-slate2-500">${note}</span>`);
+  if (st.log.loadApprovedBy || st.log.closeApprovedBy) {
+    A.push(`<span class="ml-auto text-[11px] text-slate2-400 font-num">${st.log.loadApprovedBy ? 'Loading ✓ ' + st.log.loadApprovedBy : ''}${st.log.closeApprovedBy ? ' · Closing ✓ ' + st.log.closeApprovedBy : ''}</span>`);
+  }
+  $('vehActions').innerHTML = A.join('');
+
+  // table
+  const q = ($('vehSearch').value || '').trim().toLowerCase();
+  $('vehEmpty').classList.toggle('hidden', products.length !== 0);
+  $('vehTable').innerHTML = calc.rows.filter(r => !q || (r.p.name || '').toLowerCase().includes(q)).map(r => {
+    const id = r.p.id;
+    const over = r.c > r.o + r.l;
+    const inp = (kind, val, ed) => `<input type="number" min="0" step="1" inputmode="numeric" ${ed ? '' : 'disabled'} value="${val || ''}" oninput="vehInput('${kind}','${id}',this.value)" class="w-20 border border-slate-300 rounded px-2 py-1 text-right font-num text-sm disabled:bg-slate-100 disabled:text-slate2-500" />`;
+    return `
+    <tr id="vr_${id}" class="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+      <td class="px-5 py-2 font-medium">${r.p.name}</td>
+      <td class="py-2 text-right font-num text-slate2-500">${r.o || ''}</td>
+      <td class="py-2 text-center">${inp('load', r.l, fl.loadEd)}</td>
+      <td id="vt_${id}" class="py-2 text-right font-num">${(r.o + r.l) || ''}</td>
+      <td class="py-2 text-center">${inp('close', r.c, fl.closeEd)}</td>
+      <td id="vs_${id}" class="py-2 text-right font-num font-semibold ${over || r.s < 0 ? 'text-brick-600' : ''}">${calc.closeEntered && (r.o + r.l || r.c) ? r.s : ''}</td>
+      <td id="vv_${id}" class="py-2 px-5 text-right font-num text-slate2-500">${calc.closeEntered && r.s ? fmtMoney(r.val) : ''}</td>
+    </tr>`;
+  }).join('');
+  vehRenderFoot(calc);
+}
+
+function vehRenderFoot(calc) {
+  $('vehFoot').innerHTML = `
+    <tr class="bg-navy-900 text-white text-sm">
+      <td class="px-5 py-3 font-semibold">Total / gross sale</td>
+      <td class="py-3 text-right font-num">${calc.tot.open}</td>
+      <td class="py-3 text-center font-num">${calc.tot.load}</td>
+      <td class="py-3 text-right font-num">${calc.tot.open + calc.tot.load}</td>
+      <td class="py-3 text-center font-num">${calc.tot.close}</td>
+      <td class="py-3 text-right font-num">${calc.closeEntered ? calc.tot.sales : '—'}</td>
+      <td class="py-3 px-5 text-right font-num font-semibold">${calc.closeEntered ? fmtMoney(calc.tot.value) : '—'}</td>
+    </tr>`;
+}
+
+// live update of one row while typing (does not re-render the table, so focus is kept)
+window.vehInput = (kind, pid, val) => {
+  const st = vehState(vehGetDate(), vehCurrent);
+  if (val === '') delete st.d[kind][pid]; else st.d[kind][pid] = vnum(val);
+  st.d.dirty = true;
+  const calc = vehCalc(st);
+  const r = calc.rows.find(x => x.p.id === pid);
+  if (r) {
+    const over = r.c > r.o + r.l;
+    $('vt_' + pid).textContent = (r.o + r.l) || '';
+    const sEl = $('vs_' + pid);
+    sEl.textContent = calc.closeEntered && (r.o + r.l || r.c) ? r.s : '';
+    sEl.classList.toggle('text-brick-600', over || r.s < 0);
+    $('vv_' + pid).textContent = calc.closeEntered && r.s ? fmtMoney(r.val) : '';
+  }
+  vehRenderFoot(calc);
+};
+window.vehDriverInput = (val) => {
+  const st = vehState(vehGetDate(), vehCurrent);
+  st.d.driverName = val; st.d.dirty = true;
+};
+
+async function vehPersist(st, extra) {
+  const fl = vehFlags(st);
+  const data = {
+    date: st.date, vehicle: st.v,
+    driverName: (st.d.driverName || '').trim() || currentUserEmail,
+    rev: (st.log.rev || 0) + 1,
+    updatedBy: currentUserEmail, updatedAt: serverTimestamp(),
+    ...extra,
+  };
+  if (!st.log.loadStatus) data.loadStatus = 'draft';
+  if (!st.log.closeStatus) data.closeStatus = 'draft';
+  if (data.load === undefined && fl.loadEd) data.load = st.d.load;
+  if (data.close === undefined && fl.closeEd) data.close = st.d.close;
+  await setDoc(doc(db, 'vehicleLogs', st.key), data, { mergeFields: Object.keys(data) });
+  st.d.dirty = false;
+}
+
+window.saveVehDraft = async () => {
+  try { await vehPersist(vehState(vehGetDate(), vehCurrent), {}); toast('Draft saved'); }
+  catch (e) { console.error(e); toast('Could not save — check connection / permissions'); }
+};
+
+window.submitVehLoad = async () => {
+  const st = vehState(vehGetDate(), vehCurrent);
+  const go = async () => {
+    try {
+      await vehPersist(st, { loadStatus: 'submitted', loadSubmittedBy: currentUserEmail, loadSubmittedAt: serverTimestamp() });
+      toast('Loading submitted for approval');
+    } catch (e) { console.error(e); toast('Could not submit — check connection / permissions'); }
+  };
+  if (!Object.values(st.d.load).some(q => vnum(q) > 0)) {
+    askConfirm('No items entered in Re.Ld. Submit an empty loading (vehicle only carries yesterday\'s balance)?', go);
+  } else go();
+};
+
+window.submitVehClose = async () => {
+  const st = vehState(vehGetDate(), vehCurrent);
+  const calc = vehCalc(st);
+  const bad = calc.rows.filter(r => r.c > r.o + r.l);
+  if (bad.length) { toast(`Close is more than Open + Re.Ld for: ${bad.slice(0, 3).map(r => r.p.name).join(', ')}${bad.length > 3 ? '…' : ''}`); return; }
+  try {
+    await vehPersist(st, { closeStatus: 'submitted', closeSubmittedBy: currentUserEmail, closeSubmittedAt: serverTimestamp() });
+    toast('Evening balance submitted for approval');
+  } catch (e) { console.error(e); toast('Could not submit — check connection / permissions'); }
+};
+
+window.approveVehLoad = async () => {
+  if (!canManage()) return;
+  const st = vehState(vehGetDate(), vehCurrent);
+  if ((st.log.loadStatus || 'draft') !== 'submitted') return;
+  const loadMap = {};
+  Object.entries(st.d.load).forEach(([id, q]) => { if (vnum(q) > 0) loadMap[id] = vnum(q); });
+  const items = Object.entries(loadMap);
+  for (const [id, q] of items) {
+    const p = products.find(x => x.id === id);
+    if (!p) { toast('A loaded product no longer exists'); return; }
+    if (q > (p.stock || 0)) { toast(`Not enough main stock for ${p.name} (on hand ${p.stock || 0}, loading ${q})`); return; }
+  }
+  try {
+    await runTransaction(db, async tx => {
+      const refs = items.map(([id]) => doc(db, 'products', id));
+      const snaps = [];
+      for (const r of refs) snaps.push(await tx.get(r));
+      snaps.forEach((s, i) => {
+        if (!s.exists() || (s.data().stock || 0) < items[i][1]) throw new Error('Not enough stock for ' + (s.exists() ? s.data().name : 'a product'));
+      });
+      snaps.forEach((s, i) => {
+        const [id, q] = items[i];
+        tx.update(refs[i], { stock: (s.data().stock || 0) - q });
+        tx.set(doc(colMovements), {
+          productId: id, productName: s.data().name, type: 'out', qty: q, date: st.date,
+          refType: 'vehicle-load', refId: st.key, note: `${VEHICLES[st.v]} loading — ${fmtDate(st.date)}`,
+          createdAt: serverTimestamp(),
+        });
+      });
+      const data = {
+        date: st.date, vehicle: st.v, driverName: (st.d.driverName || '').trim() || st.log.driverName || currentUserEmail,
+        load: loadMap, loadDeducted: loadMap, loadStatus: 'approved',
+        loadApprovedBy: currentUserEmail, loadApprovedAt: serverTimestamp(),
+        rev: (st.log.rev || 0) + 1, updatedBy: currentUserEmail, updatedAt: serverTimestamp(),
+      };
+      tx.set(doc(db, 'vehicleLogs', st.key), data, { mergeFields: Object.keys(data) });
+    });
+    st.d.dirty = false;
+    toast('Loading approved — main stock reduced');
+  } catch (e) { console.error(e); toast(e.message || 'Could not approve loading'); }
+};
+
+window.approveVehClose = async () => {
+  if (!canManage()) return;
+  const st = vehState(vehGetDate(), vehCurrent);
+  if (st.log.closeStatus !== 'submitted') return;
+  if (st.log.loadStatus !== 'approved') { toast('Approve the loading first'); return; }
+  const calc = vehCalc(st);
+  const bad = calc.rows.filter(r => r.c > r.o + r.l);
+  if (bad.length) { toast(`Close is more than Open + Re.Ld for: ${bad[0].p.name}`); return; }
+  const closeMap = {}, salesMap = {}, priceSnap = {};
+  calc.rows.forEach(r => {
+    if (r.c > 0) closeMap[r.p.id] = r.c;
+    if (r.s > 0) { salesMap[r.p.id] = r.s; priceSnap[r.p.id] = r.price; }
+  });
+  try {
+    await vehPersist(st, {
+      close: closeMap, sales: salesMap, priceSnap, salesUnits: calc.tot.sales, salesTotal: calc.tot.value,
+      closeStatus: 'approved', closeApprovedBy: currentUserEmail, closeApprovedAt: serverTimestamp(),
+    });
+    toast('Closing approved — day locked');
+  } catch (e) { console.error(e); toast('Could not approve closing'); }
+};
+
+window.sendBackVeh = (section) => {
+  if (!canManage()) return;
+  askConfirm('Send this back to the driver for correction?', async () => {
+    try {
+      const st = vehState(vehGetDate(), vehCurrent);
+      await vehPersist(st, section === 'load' ? { loadStatus: 'draft' } : { closeStatus: 'draft' });
+      toast('Sent back to driver');
+    } catch (e) { console.error(e); toast('Could not update'); }
+  });
+};
+
+window.reopenVeh = (section) => {
+  if (!canManage()) return;
+  const st = vehState(vehGetDate(), vehCurrent);
+  if (section === 'load') {
+    if ((st.log.closeStatus || 'draft') !== 'draft') { toast('Reopen the closing first'); return; }
+    askConfirm('Reopen loading? The loaded quantities will be added back to main stock, and the driver can edit and resubmit.', async () => {
+      const ded = Object.entries(st.log.loadDeducted || {});
+      try {
+        await runTransaction(db, async tx => {
+          const refs = ded.map(([id]) => doc(db, 'products', id));
+          const snaps = [];
+          for (const r of refs) snaps.push(await tx.get(r));
+          snaps.forEach((s, i) => {
+            if (!s.exists()) return;
+            const [id, q] = ded[i];
+            tx.update(refs[i], { stock: (s.data().stock || 0) + q });
+            tx.set(doc(colMovements), {
+              productId: id, productName: s.data().name, type: 'in', qty: q, date: st.date,
+              refType: 'vehicle-load-reversal', refId: st.key, note: `${VEHICLES[st.v]} loading reopened — ${fmtDate(st.date)}`,
+              createdAt: serverTimestamp(),
+            });
+          });
+          const data = { loadStatus: 'draft', loadDeducted: {}, rev: (st.log.rev || 0) + 1, updatedBy: currentUserEmail, updatedAt: serverTimestamp() };
+          tx.set(doc(db, 'vehicleLogs', st.key), data, { mergeFields: Object.keys(data) });
+        });
+        toast('Loading reopened — stock restored');
+      } catch (e) { console.error(e); toast('Could not reopen loading'); }
+    });
+  } else {
+    askConfirm('Reopen the closing count? Sales for this day will be unlocked.', async () => {
+      try { await vehPersist(st, { closeStatus: 'draft' }); toast('Closing reopened'); }
+      catch (e) { console.error(e); toast('Could not reopen closing'); }
+    });
+  }
+};
+
+// ---------- Print sheet (layout follows the paper "Daily Sales Summary") ----------
+function vehSheetHtml(date, v) {
+  const st = vehState(date, v);
+  const calc = vehCalc(st);
+  const rows = calc.rows;
+  const half = Math.ceil(rows.length / 2);
+  const blank = n => (n ? n : '');
+  const cell = r => r
+    ? `<td>${r.p.name}</td><td class="n">${blank(r.o)}</td><td class="n">${blank(r.l)}</td><td class="n">${calc.closeEntered ? blank(r.c) : ''}</td><td class="n">${calc.closeEntered ? blank(r.s) : ''}</td>`
+    : `<td></td><td></td><td></td><td></td><td></td>`;
+  let body = '';
+  for (let i = 0; i < half; i++) body += `<tr>${cell(rows[i])}<td class="gap"></td>${cell(rows[i + half])}</tr>`;
+  const head = `<th style="width:23%">PRODUCTS</th><th>OPEN</th><th>RE.LD</th><th>CLOSE</th><th>SALES</th>`;
+  const t = calc.tot;
+  const foot = `
+    <tr><td><b>TOTAL (units)</b></td><td class="n">${blank(t.open)}</td><td class="n">${blank(t.load)}</td><td class="n">${calc.closeEntered ? blank(t.close) : ''}</td><td class="n">${calc.closeEntered ? blank(t.sales) : ''}</td>
+        <td class="gap"></td><td><b>CASH BALANCE</b></td><td colspan="4"></td></tr>
+    <tr><td><b>GROSS SALE</b></td><td colspan="4" class="n" style="font-size:11px">${calc.closeEntered ? fmtMoney(t.value) : ''}</td>
+        <td class="gap"></td><td><b>CASH DEPOSITE</b></td><td colspan="4"></td></tr>`;
+  const driver = st.d.driverName || st.log.driverName || '';
+  return `
+  <div class="veh-sheet">
+    <h2>MALIBAN BISCUIT PRODUCTS DAILY SALES SUMMERY</h2>
+    <div class="meta">
+      <span><b>${VEHICLES[v]}</b></span>
+      <span>Date: <b>${fmtDate(date)}</b></span>
+      <span>Driver: <b>${driver || '—'}</b></span>
+      <span>Status: <b>${st.log.loadStatus || 'draft'} / ${st.log.closeStatus || 'draft'}</b></span>
+    </div>
+    <table>
+      <thead><tr>${head}<th class="gap"></th>${head}</tr></thead>
+      <tbody>${body}</tbody>
+      <tfoot>${foot}</tfoot>
+    </table>
+    <div class="sign">
+      <div>Driver: ${driver}</div>
+      <div>Checked by${st.log.loadApprovedBy ? ': ' + st.log.loadApprovedBy : ''}</div>
+      <div>Approved by${st.log.closeApprovedBy ? ': ' + st.log.closeApprovedBy : ''}</div>
+    </div>
+  </div>`;
+}
+
+window.printVehicleSheet = (which) => {
+  const date = vehGetDate();
+  const list = which === 'both' ? ['V1', 'V2'] : [which];
+  $('vehPrintRoot').innerHTML = list.map(v => vehSheetHtml(date, v)).join('');
+  document.body.classList.add('printing-veh');
+  const done = () => { document.body.classList.remove('printing-veh'); window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done);
+  setTimeout(() => window.print(), 80);
+};
+
+</script>
+</body>
+</html>
